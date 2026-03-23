@@ -38,6 +38,7 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
   const [nuevoUser, setNuevoUser] = useState({ email: '', password: '', role: 'analista', nombre: '', telefono: '' })
   const [editUser, setEditUser] = useState<any>(null)
+  const [editUserPassword, setEditUserPassword] = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -46,6 +47,8 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
       if (e.key === 'Escape') {
          setIsCreateModalOpen(false)
          setIsEditModalOpen(false)
+         setEditUserPassword('')
+         setErrorMSG('')
       }
     }
     window.addEventListener('keydown', handleKeyDown)
@@ -96,6 +99,27 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
         nombre: editUser.nombre,
         telefono: editUser.telefono
      }).eq('id', editUser.id)
+     if (editUserPassword) {
+        if (editUserPassword.length < 6) {
+           setErrorMSG('La contraseña debe tener al menos 6 caracteres.')
+           setLoading(false)
+           return
+        }
+        const res = await fetch('/api/users', {
+           method: 'PATCH',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ userId: editUser.id, newPassword: editUserPassword })
+        })
+        const data = await res.json()
+        if (!res.ok) {
+           setErrorMSG(data.error)
+           setLoading(false)
+           return
+        }
+        logAction(supabase, user, 'Usuarios', 'CAMBIAR_CLAVE', `Contraseña cambiada para: ${editUser.email}`)
+     }
+     logAction(supabase, user, 'Usuarios', 'EDITAR', `Editado usuario: ${editUser.email}`)
+     setEditUserPassword('')
      setIsEditModalOpen(false)
      load()
      setLoading(false)
@@ -242,8 +266,13 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
                           <option value="admin">Administrador</option>
                        </select>
                     </div>
+                    <div>
+                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nueva Contraseña <span className="text-slate-400 font-normal normal-case">(dejar vacío para no cambiar)</span></label>
+                       <input type="password" value={editUserPassword} onChange={e=>setEditUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres" className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
+                    </div>
+                    {errorMSG && <p className="text-red-500 text-sm font-semibold">{errorMSG}</p>}
                     <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-4">
-                       <button type="button" onClick={()=>setIsEditModalOpen(false)} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3.5 px-6 rounded-xl transition-all">
+                       <button type="button" onClick={()=>{setIsEditModalOpen(false); setEditUserPassword(''); setErrorMSG('')}} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3.5 px-6 rounded-xl transition-all">
                           Cancelar
                        </button>
                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex-1 rounded-xl shadow-lg shadow-blue-500/30 transition-all">
@@ -713,10 +742,10 @@ function MultiSelectGanaderos({ options, selected, onChange, disabled }: any) {
   
   return (
     <div className="relative w-full">
-      <div className={`border border-slate-300 rounded bg-white min-h-[36px] p-1 flex flex-wrap gap-1 items-center ${disabled ? 'opacity-90 cursor-default' : 'cursor-text'}`} onClick={()=>{if(!disabled) setOpen(true)}}>
+      <div className={`rounded bg-white min-h-[36px] p-1 flex flex-wrap gap-1 items-center ${disabled ? 'opacity-90 cursor-default' : 'cursor-text border border-slate-300'}`} onClick={()=>{if(!disabled) setOpen(true)}}>
          {selected.map((cod:string) => {
             const op = options.find((o:any) => o.codigo_ganadero === cod)
-            return <div key={cod} className="bg-blue-100 text-blue-800 text-[10px] sm:text-xs px-2 py-0.5 rounded shadow-sm text-left font-bold">{op?.nombre || cod}</div>
+            return <div key={cod} className="bg-blue-100 text-blue-800 text-[10px] sm:text-xs px-2 py-0.5 rounded shadow-sm text-left font-bold">{op ? `${op.codigo_ganadero} ${op.nombre}` : cod}</div>
          })}
          {!disabled && (
            <input type="text" value={search} onChange={e=>setSearch(e.target.value)} className="outline-none flex-1 min-w-[50px] text-xs font-semibold px-1" placeholder={selected.length===0?"Buscar ganaderos...":""} />
@@ -776,7 +805,7 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
 
   return (
     <tr className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}>
-       <td className="border border-slate-200 text-center py-2 px-2">
+       <td className="no-export border border-slate-200 text-center py-2 px-2">
          {p.id && <input type="checkbox" checked={isSelected} onChange={(e) => onSelect(p.id, e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"/>}
        </td>
        <td className="border border-slate-200 text-center font-extrabold text-slate-800 py-3">
@@ -817,7 +846,7 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
        
        <td className="border border-slate-200 text-right px-3 font-black text-emerald-700 bg-slate-50 whitespace-nowrap">{totalBs.toLocaleString('es-VE',{minimumFractionDigits:3})} Bs</td>
        <td className="border border-slate-200 text-right px-3 font-black text-emerald-700 bg-slate-50 whitespace-nowrap">{totalUSD.toLocaleString('es-VE',{minimumFractionDigits:3})} $</td>
-       <td className="border border-slate-200 text-center py-2 space-x-2 px-2 whitespace-nowrap">
+       <td className="no-export border border-slate-200 text-center py-2 space-x-2 px-2 whitespace-nowrap">
          {isEditing ? (
            <button onClick={handleSave} className="bg-blue-600 text-white px-2 py-1.5 rounded shadow-sm hover:bg-blue-700 transition-colors"><Save size={16}/></button>
          ) : (
@@ -950,6 +979,8 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
     if (!tableRef.current) return
     try {
       const el = tableRef.current
+      const toHide = el.querySelectorAll<HTMLElement>('.no-export')
+      toHide.forEach(e => { e.dataset.oldDisplay = e.style.display; e.style.display = 'none' })
       const dataUrl = await toPng(el, {
         backgroundColor: '#ffffff',
         pixelRatio: 2,
@@ -957,6 +988,7 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         height: el.scrollHeight,
         style: { overflow: 'visible' }
       })
+      toHide.forEach(e => { e.style.display = e.dataset.oldDisplay || '' })
       const link = document.createElement('a')
       link.download = `PreciosSemanales-${selectedSemana}.png`
       link.href = dataUrl
@@ -1047,7 +1079,7 @@ CREATE TABLE precios_semanales (
                <table className="min-w-full divide-y divide-slate-200 border-collapse table-auto text-sm">
                   <thead className="border-b-2 border-slate-300">
                      <tr>
-                        <th className="py-2 px-2 border border-slate-300 bg-slate-50 text-center text-slate-400" rowSpan={2}>
+                        <th className="no-export py-2 px-2 border border-slate-300 bg-slate-50 text-center text-slate-400" rowSpan={2}>
                            <input type="checkbox" checked={precios.length > 0 && selectedRows.length === precios.length} onChange={(e) => setSelectedRows(e.target.checked ? precios.map(p=>p.id) : [])} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"/>
                         </th>
                         <th className="py-2 px-3 border border-slate-300 bg-[#3b82f6] font-extrabold text-center text-white uppercase text-[11px]" rowSpan={2}>Rutas</th>
@@ -1055,7 +1087,7 @@ CREATE TABLE precios_semanales (
                         <th className="py-2 px-3 border border-slate-300 bg-[#3b82f6] font-black text-center text-white text-[11px]" rowSpan={2}>BENEFICIARIO</th>
                         <th className="py-2 px-3 border border-slate-300 bg-[#3b82f6] font-extrabold text-center text-white uppercase text-[11px]" colSpan={4}>PRECIOS POR LITRO</th>
                         <th className="py-2 px-3 border border-slate-300 bg-[#3b82f6] font-extrabold text-center text-white uppercase text-[11px]" colSpan={2}>TOTAL A PAGAR A PUERTA PLANTA</th>
-                        <th className="py-2 px-3 border border-slate-300 bg-slate-50 font-extrabold text-center text-slate-800 text-xs" rowSpan={2}>Acciones</th>
+                        <th className="no-export py-2 px-3 border border-slate-300 bg-slate-50 font-extrabold text-center text-slate-800 text-xs" rowSpan={2}>Acciones</th>
                      </tr>
                      <tr className="bg-slate-50">
                         <th className="py-2 px-2 border border-slate-300 text-[10px] text-center font-bold">Precio a Pta. Corral Prov. $</th>
