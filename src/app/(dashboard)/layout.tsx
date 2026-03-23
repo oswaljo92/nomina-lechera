@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
-import Sidebar from '@/components/Sidebar'
+import DashboardShell from '@/components/DashboardShell'
 import React from 'react'
 
 export default async function DashboardLayout({
@@ -27,15 +27,12 @@ export default async function DashboardLayout({
   const userName = profile?.nombre || user.email?.split('@')[0] || 'Usuario'
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar userRole={userRole} userEmail={user.email || ''} userName={userName} />
-      
-      {/* Contenido principal se desliza a la derecha del sidebar */}
-      <main className="flex-1 ml-64 flex flex-col overflow-y-auto">
-        <div className="flex-1 w-full max-w-7xl mx-auto p-8 fade-in">
-          {children}
-        </div>
-      </main>
-    </div>
+    <DashboardShell 
+      userRole={userRole as 'admin' | 'analista'} 
+      userEmail={user.email || ''} 
+      userName={userName}
+    >
+      {children}
+    </DashboardShell>
   )
 }

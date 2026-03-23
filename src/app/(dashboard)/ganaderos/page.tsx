@@ -82,14 +82,14 @@ export default function GanaderosPage() {
 
   const handleDeleteManyConf = async () => {
     await supabase.from('ganaderos').delete().in('id', Array.from(selectedIds))
-    logAction(supabase, curUser, 'Ganaderos', 'BORRADO_MASIVO', `Eliminados ${selectedIds.size} ganaderos permanentemente.`)
+    logAction(supabase, curUser, 'Ganaderos', 'BORRADO_MASIVO', `Eliminados ${selectedIds.size} ganaderos.`)
     setSelectedIds(new Set())
     setIsDeleteModalOpen(false)
     load()
   }
 
   const handleDeleteSingle = async (id: string, nombre: string) => {
-    if (!confirm(`¿Estás seguro de eliminar el ganadero: ${nombre}? \nEsta acción no se puede deshacer.`)) return
+    if (!confirm(`¿Estás seguro de eliminar el ganadero: ${nombre}?`)) return
     await supabase.from('ganaderos').delete().eq('id', id)
     logAction(supabase, curUser, 'Ganaderos', 'BORRAR', `Eliminado ganadero: ${nombre}`)
     load()
@@ -97,7 +97,6 @@ export default function GanaderosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    
     const payload = {
         codigo_ganadero: editGanadero.codigo_ganadero,
         nombre: editGanadero.nombre,
@@ -112,10 +111,10 @@ export default function GanaderosPage() {
 
     if (editGanadero.id) {
        await supabase.from('ganaderos').update(payload).eq('id', editGanadero.id)
-       logAction(supabase, curUser, 'Ganaderos', 'EDITAR', `Editado ganadero: ${payload.nombre} (${payload.codigo_ganadero})`)
+       logAction(supabase, curUser, 'Ganaderos', 'EDITAR', `Editado ganadero: ${payload.nombre}`)
     } else {
        await supabase.from('ganaderos').insert(payload)
-       logAction(supabase, curUser, 'Ganaderos', 'CREAR', `Creado nuevo ganadero: ${payload.nombre} (${payload.codigo_ganadero})`)
+       logAction(supabase, curUser, 'Ganaderos', 'CREAR', `Creado ganadero: ${payload.nombre}`)
     }
     setIsModalOpen(false)
     load()
@@ -124,217 +123,191 @@ export default function GanaderosPage() {
   if (loading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-500 w-12 h-12" /></div>
 
   return (
-    <div className="space-y-6 fade-in pb-20">
-      <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+    <div className="space-y-6 fade-in pb-20 px-4 sm:px-0">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Directorio de Ganaderos</h1>
-          <p className="text-slate-500">Listado de los proveedores, agrupaciones y rutas asociadas.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Ganaderos</h1>
+          <p className="text-slate-500 text-sm">Directorio de proveedores y rutas.</p>
         </div>
         {isAdmin && (
-          <button onClick={() => setIsBitacoraOpen(true)} className="flex items-center gap-2 px-6 py-3 font-bold text-slate-500 hover:text-slate-800 transition-all border border-slate-200 hover:bg-slate-50 rounded-xl shadow-sm">
-             <History size={20} /> Vitácora
+          <button onClick={() => setIsBitacoraOpen(true)} className="flex items-center justify-center gap-2 px-6 py-2.5 font-bold text-slate-500 hover:text-slate-800 transition-all border border-slate-200 rounded-xl bg-white w-full sm:w-auto shadow-sm">
+             <History size={18} /> Vitácora
           </button>
         )}
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
-        {/* Barra de Búsqueda y Herramientas */}
-        <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between gap-4">
-           <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-3 top-3.5 text-slate-400" size={18} />
+        <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col lg:flex-row justify-between gap-4">
+           <div className="relative flex-1">
+              <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
               <input 
                 type="text" 
-                placeholder="Buscar (ej. código, nombre, ruta, grupo o SAP)..."
+                placeholder="Buscar ganadero..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-300 bg-white text-black font-semibold focus:ring-2 focus:ring-blue-500 placeholder-slate-400 shadow-sm"
+                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-blue-500"
               />
            </div>
            
-           <div className="flex gap-2">
+           <div className="flex flex-col sm:flex-row gap-2">
               {selectedIds.size > 0 && isAdmin && (
-                <button onClick={()=>setIsDeleteModalOpen(true)} className="bg-red-100 hover:bg-red-200 text-red-700 font-bold px-4 py-3 rounded-xl flex items-center gap-2 shadow-sm transition-colors border border-red-200">
-                  <Trash2 size={18} /> Borrar Masivo ({selectedIds.size})
+                <button onClick={()=>setIsDeleteModalOpen(true)} className="bg-red-50 text-red-700 font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-red-100">
+                  <Trash2 size={16} /> Borrar ({selectedIds.size})
                 </button>
               )}
               <button onClick={() => { 
                   setEditGanadero({codigo_ganadero: '', nombre: '', ruta_id: '', grupo: '', sap: '', telefono: '', ubicacion: '', tipo_proveedor: 'TERCERO'})
                   setIsModalOpen(true) 
-                }} className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-3 rounded-xl flex items-center gap-2 shadow-sm transition-colors">
+                }} className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
                 <Plus size={18} /> Nuevo Ganadero
               </button>
            </div>
         </div>
 
-        <div className="overflow-x-auto">
+        {/* Vista Mobile - Tarjetas */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {filteredGanaderos.length === 0 ? (
+            <div className="p-10 text-center text-slate-400 font-bold text-sm">Sin resultados</div>
+          ) : filteredGanaderos.map((item) => (
+            <div key={item.id} className="p-4 flex items-start gap-3">
+              {isAdmin && (
+                <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} className="mt-1 w-4 h-4 shrink-0" />
+              )}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="text-xs font-black text-blue-600">{item.codigo_ganadero}</span>
+                    <p className="font-bold text-slate-800 text-sm mt-0.5 leading-tight">{item.nombre}</p>
+                    <p className="text-xs text-slate-500 mt-0.5 truncate">{item.ubicacion || 'Sin ubicación'}</p>
+                  </div>
+                  <span className={`shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black ${item.activo !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                    {item.activo !== false ? 'ACTIVO' : 'BLOQUEADO'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between mt-3">
+                  <div className="text-xs min-w-0">
+                    <span className="font-semibold text-slate-600 truncate">{Array.isArray(item.rutas) ? item.rutas[0]?.nombre_ruta : item.rutas?.nombre_ruta || '-'}</span>
+                    <span className="ml-2 font-black text-blue-500 uppercase text-[10px]">{item.tipo_proveedor}</span>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => { setEditGanadero(item); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg active:scale-95"><Edit2 size={15} /></button>
+                    {isAdmin && <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 bg-red-50 p-2 rounded-lg active:scale-95"><Trash2 size={15} /></button>}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Vista Desktop - Tabla */}
+        <div className="hidden sm:block overflow-x-auto">
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
               <tr>
-                {isAdmin && (
-                  <th className="px-6 py-3 w-10">
-                    <input type="checkbox" checked={selectedIds.size === filteredGanaderos.length && filteredGanaderos.length > 0} onChange={toggleAll} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer" />
-                  </th>
-                )}
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cód</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre y Ubicación</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Ruta & Grupo</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</th>
-                <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">SAP / Teléfono</th>
+                {isAdmin && <th className="px-6 py-3 w-10 text-center"><input type="checkbox" checked={selectedIds.size === filteredGanaderos.length && filteredGanaderos.length > 0} onChange={toggleAll} /></th>}
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Acciones</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Cód</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Nombre</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Estado</th>
+                <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ruta / Tipo</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
               {filteredGanaderos.map((item) => (
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  {isAdmin && (
-                    <td className="px-6 py-4">
-                      <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer" />
-                    </td>
-                  )}
-                  {/* ACCIONES DE PRIMERO */}
+                  {isAdmin && <td className="px-6 py-4 text-center"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} /></td>}
                   <td className="px-6 py-4 whitespace-nowrap text-sm flex gap-3">
-                     <button onClick={() => { setEditGanadero(item); setIsModalOpen(true) }} className="text-blue-500 hover:text-white hover:bg-blue-600 bg-blue-50 p-2 rounded transition-colors" title="Editar Ganadero"><Edit2 size={16} /></button>
-                     {isAdmin && (
-                        <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 hover:text-white hover:bg-red-600 bg-red-50 p-2 rounded transition-colors" title="Eliminar Ganadero"><Trash2 size={16} /></button>
-                     )}
+                     <button onClick={() => { setEditGanadero(item); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
+                     {isAdmin && <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-extrabold text-blue-600">{item.codigo_ganadero}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-xs font-black text-blue-600">{item.codigo_ganadero}</td>
                   <td className="px-6 py-4">
-                     <div className="font-extrabold text-slate-800 break-words whitespace-normal leading-tight">{item.nombre}</div>
-                     <div className="text-xs font-semibold text-slate-500 mt-1 truncate max-w-xs">{item.ubicacion || 'Sin ubicación'}</div>
+                     <div className="font-bold text-slate-800 text-xs">{item.nombre}</div>
+                     <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{item.ubicacion || 'Sin ubicación'}</div>
                   </td>
-                  
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                     {item.activo !== false ? (
-                        <span className="bg-emerald-100 text-emerald-800 font-bold px-3 py-1 rounded-full text-xs tracking-wider">ACTIVO</span>
-                     ) : (
-                        <span className="bg-rose-100 text-rose-800 font-bold px-3 py-1 rounded-full text-xs tracking-wider">BLOQUEADO</span>
-                     )}
-                  </td>
-
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                     <div className="font-extrabold text-slate-700">{Array.isArray(item.rutas) ? item.rutas[0]?.nombre_ruta : item.rutas?.nombre_ruta || '-'}</div>
-                     <div className="text-xs font-semibold text-slate-500">Grupo: {item.grupo || '-'}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                     <span className={`px-2.5 py-1 text-[11px] font-bold tracking-wider rounded-full ${item.tipo_proveedor === 'PROPIO' ? 'bg-green-100 text-green-800 border border-green-200' : 'bg-orange-100 text-orange-800 border border-orange-200'}`}>
-                        {item.tipo_proveedor}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${item.activo !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
+                        {item.activo !== false ? 'ACTIVO' : 'BLOQUEADO'}
                      </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                     <div className="font-extrabold text-slate-700">{item.sap || '-'}</div>
-                     <div className="text-xs font-semibold text-slate-500">{item.telefono || '-'}</div>
+                  <td className="px-6 py-4 whitespace-nowrap text-[10px]">
+                     <div className="font-bold text-slate-700">{Array.isArray(item.rutas) ? item.rutas[0]?.nombre_ruta : item.rutas?.nombre_ruta || '-'}</div>
+                     <div className="text-slate-400 font-extrabold uppercase">{item.tipo_proveedor}</div>
                   </td>
                 </tr>
               ))}
-              {filteredGanaderos.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-10 text-slate-500">No hay ganaderos encontrados según los filtros de búsqueda.</td></tr>
-              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Modal CRUD */}
       {isModalOpen && (
-        <div onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-y-auto max-h-[90vh] zoom-in-95">
-             <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 sticky top-0 z-10">
-                <h3 className="font-bold text-slate-800 text-sm px-4">{editGanadero.id ? 'Editar Ganadero' : 'Registro Nuevo Ganadero'}</h3>
-                {/* Botón de Cerrar Win11 */}
-                <button type="button" onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white hover:bg-red-500 px-4 py-3 transition-colors">
-                   <X size={18}/>
-                </button>
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto overflow-hidden animate-in zoom-in-95">
+             <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
+                <h3 className="font-black text-slate-800 text-sm">{editGanadero.id ? 'Editar Ganadero' : 'Nuevo Ganadero'}</h3>
+                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
              </div>
              
-             <form onSubmit={handleSave} className="p-6 space-y-5">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+             <form onSubmit={handleSave} className="p-4 sm:p-6 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                    <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Código Prov.</label>
-                      <input autoFocus required type="text" value={editGanadero.codigo_ganadero} onChange={e=>setEditGanadero({...editGanadero, codigo_ganadero: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Ej: G-001" />
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Código</label>
+                      <input required type="text" value={editGanadero.codigo_ganadero} onChange={e=>setEditGanadero({...editGanadero, codigo_ganadero: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold" />
                    </div>
                    <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Nombre Completo</label>
-                      <input required type="text" value={editGanadero.nombre} onChange={e=>setEditGanadero({...editGanadero, nombre: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Juan Perez" />
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nombre</label>
+                      <input required type="text" value={editGanadero.nombre} onChange={e=>setEditGanadero({...editGanadero, nombre: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold" />
                    </div>
-                   
                    <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Ruta de Transporte</label>
-                      <select value={editGanadero.ruta_id || ''} onChange={e=>setEditGanadero({...editGanadero, ruta_id: e.target.value})} className="w-full bg-white text-black border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ruta</label>
+                      <select value={editGanadero.ruta_id || ''} onChange={e=>setEditGanadero({...editGanadero, ruta_id: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold">
                          <option value="">(Sin asignar)</option>
                          {rutasDisponibles.map(r => <option key={r.id} value={r.id}>{r.codigo_ruta} - {r.nombre_ruta}</option>)}
                       </select>
                    </div>
                    <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Grupo (Para Precios)</label>
-                      <input type="text" value={editGanadero.grupo} onChange={e=>setEditGanadero({...editGanadero, grupo: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Ej.: 35" />
-                   </div>
-
-                   <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Tipo Proveedor</label>
-                      <select value={editGanadero.tipo_proveedor} onChange={e=>setEditGanadero({...editGanadero, tipo_proveedor: e.target.value})} className="w-full bg-white text-blue-800 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-extrabold shadow-sm">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Tipo</label>
+                      <select value={editGanadero.tipo_proveedor} onChange={e=>setEditGanadero({...editGanadero, tipo_proveedor: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-black text-blue-700">
                          <option value="TERCERO">Tercero</option>
                          <option value="PROPIO">Propio</option>
                       </select>
                    </div>
-                   <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Código SAP</label>
-                      <input type="text" value={editGanadero.sap} onChange={e=>setEditGanadero({...editGanadero, sap: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Opcional" />
+                   <div className="sm:col-span-2">
+                      <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ubicación</label>
+                      <input type="text" value={editGanadero.ubicacion} onChange={e=>setEditGanadero({...editGanadero, ubicacion: e.target.value})} className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold" />
                    </div>
-
-                   <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Teléfono</label>
-                      <input type="tel" value={editGanadero.telefono} onChange={e=>setEditGanadero({...editGanadero, telefono: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Opcional" />
-                   </div>
-                   <div>
-                      <label className="block text-xs font-extrabold text-slate-500 uppercase tracking-wide mb-1.5">Ubicación</label>
-                      <input type="text" value={editGanadero.ubicacion} onChange={e=>setEditGanadero({...editGanadero, ubicacion: e.target.value})} className="w-full bg-white text-black placeholder-slate-400 border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 font-bold shadow-sm" placeholder="Finca, Sector..." />
-                   </div>
-                   
-                   <div className="md:col-span-2 mt-2">
-                       <label className="flex items-center gap-3 bg-slate-50 p-4 border border-slate-200 rounded-lg cursor-pointer hover:bg-slate-100 transition-colors">
-                         <input 
-                           type="checkbox" 
-                           checked={editGanadero.activo !== false}
-                           onChange={e=>setEditGanadero({...editGanadero, activo: e.target.checked})}
-                           className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                         />
-                         <div>
-                           <div className="font-extrabold text-slate-800 text-sm">Ganadero Activo</div>
-                           <div className="text-xs font-semibold text-slate-500">Desmarca para "Bloquear" al ganadero y evitar que se use en nuevas recepciones.</div>
-                         </div>
+                   <div className="sm:col-span-2">
+                       <label className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer">
+                         <input type="checkbox" checked={editGanadero.activo !== false} onChange={e=>setEditGanadero({...editGanadero, activo: e.target.checked})} className="w-4 h-4 rounded text-blue-600" />
+                         <span className="text-xs font-bold text-slate-700">Ganadero Activo</span>
                        </label>
                    </div>
                 </div>
 
-                <div className="pt-6 flex justify-end gap-3 border-t border-slate-100 mt-6">
-                   <button type="button" onClick={() => setIsModalOpen(false)} className="bg-slate-200 text-slate-700 font-extrabold px-6 py-3 rounded-xl hover:bg-slate-300 transition-colors">Cancelar</button>
-                   <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-extrabold px-8 py-3 rounded-xl shadow-lg shadow-blue-500/30 transition-colors">
-                     {editGanadero.id ? 'Guardar Cambios' : 'Crear Ganadero'}
-                   </button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-6 border-t">
+                   <button type="button" onClick={() => setIsModalOpen(false)} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl order-2 sm:order-1">Cancelar</button>
+                   <button type="submit" className="bg-blue-600 text-white font-black py-3 rounded-xl order-1 sm:order-2 shadow-lg shadow-blue-500/20">Guardar</button>
                 </div>
              </form>
           </div>
         </div>
       )}
 
-      {/* Modal Confirmación de Borrado */}
       {isDeleteModalOpen && (
-        <div onClick={(e) => { if(e.target === e.currentTarget) setIsDeleteModalOpen(false) }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden zoom-in-95 text-center p-8">
-             <AlertCircle size={56} className="text-red-500 mx-auto mb-4" />
-             <h3 className="text-xl font-extrabold text-slate-800 mb-2">Eliminar {selectedIds.size} Ganaderos</h3>
-             <p className="text-slate-500 font-medium mb-8">Esta acción es destructiva e irreversible. Se borrarán permanentemente del sistema.</p>
-             <div className="flex gap-3">
-               <button onClick={()=>setIsDeleteModalOpen(false)} className="flex-1 bg-slate-200 text-slate-700 font-bold rounded-xl py-3 hover:bg-slate-300 transition-all">Cancelar</button>
-               <button onClick={handleDeleteManyConf} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl py-3 shadow-lg shadow-red-500/30 transition-all">Sí, Eliminar</button>
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-6 text-center max-w-sm w-full animate-in zoom-in-95">
+             <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+             <h3 className="font-black text-lg text-slate-800">¿Eliminar registros?</h3>
+             <p className="text-slate-500 text-sm mb-6 mt-2">Esta acción borrará permanentemente {selectedIds.size} ganaderos.</p>
+             <div className="grid grid-cols-2 gap-3">
+               <button onClick={()=>setIsDeleteModalOpen(false)} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cerrar</button>
+               <button onClick={handleDeleteManyConf} className="bg-red-600 text-white font-bold py-3 rounded-xl">Eliminar</button>
              </div>
           </div>
         </div>
       )}
 
-      {/* Modal Vitácora */}
       {isBitacoraOpen && <ModalVitacora isOpen={isBitacoraOpen} onClose={() => setIsBitacoraOpen(false)} module="Ganaderos" />}
     </div>
   )
@@ -346,13 +319,11 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    if (isOpen) fetchLogs()
-  }, [isOpen])
+  useEffect(() => { if (isOpen) fetchLogs() }, [isOpen])
 
   const fetchLogs = async () => {
     setLoading(true)
-    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(100)
+    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(50)
     if (data) setLogs(data)
     setLoading(false)
   }
@@ -366,58 +337,31 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
-       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col m-4">
-          <div className="flex justify-between items-center p-6 bg-slate-100 border-b border-slate-200">
-             <div>
-                <h3 className="font-black text-slate-800 text-xl flex items-center gap-2">
-                   <History className="text-blue-600"/> Vitácora de {module}
-                </h3>
-                <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Historial detallado para auditoría en planta</p>
-             </div>
-             <button onClick={onClose} className="text-slate-400 hover:text-white hover:bg-red-500 p-2 rounded-full transition-all">
-                <X size={24}/>
-             </button>
+    <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
+          <div className="flex justify-between items-center p-4 sm:p-6 bg-slate-50 border-b border-slate-200 shrink-0">
+             <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                <History className="text-blue-600" size={18}/> Vitácora {module}
+             </h3>
+             <button onClick={onClose} className="text-slate-400 hover:text-red-500 p-1"><X size={24}/></button>
           </div>
-          <div className="p-6 flex-1 overflow-hidden flex flex-col">
-             <div className="flex justify-between items-center gap-4 mb-4">
-                <div className="relative flex-1 max-w-lg">
-                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-                   <input type="text" placeholder="Filtrar por usuario, acción o detalle..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-black font-extrabold focus:ring-2 focus:ring-blue-500 shadow-sm" />
-                </div>
-                <button onClick={fetchLogs} className="flex items-center gap-2 text-blue-600 font-bold hover:underline">
-                   <RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/> Actualizar
-                </button>
+          <div className="p-4 flex-1 overflow-hidden flex flex-col">
+             <div className="relative mb-4">
+                <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
+                <input type="text" placeholder="Filtrar..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 font-bold text-xs" />
              </div>
-
-             <div className="flex-1 overflow-y-auto pr-2 space-y-3 pb-8">
-                {loading ? <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500 w-12 h-12"/></div> : (
-                  <>
-                    {filtered.map(log => (
-                       <div key={log.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row md:items-center gap-4 hover:shadow-md transition-shadow">
-                          <div className="shrink-0 flex md:flex-col items-center gap-2 md:gap-0 min-w-[120px]">
-                             <span className="text-[10px] font-black text-slate-400">{new Date(log.created_at).toLocaleDateString()}</span>
-                             <span className="text-sm font-black text-blue-600">{new Date(log.created_at).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</span>
-                          </div>
-                          <div className="shrink-0">
-                             <span className={`px-2 py-1 rounded text-[10px] font-black uppercase tracking-tighter shadow-sm border ${
-                               log.accion === 'BORRAR' || log.accion === 'BORRADO_MASIVO' || log.accion === 'BORRAR_MASIVO' ? 'bg-red-50 text-red-700 border-red-100' :
-                               log.accion === 'CREAR' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-blue-50 text-blue-700 border-blue-100'
-                             }`}>
-                                {log.accion}
-                             </span>
-                          </div>
-                          <div className="flex-1">
-                             <p className="text-sm text-slate-700 font-extrabold leading-tight">{log.detalles}</p>
-                          </div>
-                          <div className="shrink-0 text-right bg-white px-3 py-2 rounded-xl border border-slate-100 shadow-sm">
-                             <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mb-1">Operador</div>
-                             <div className="text-xs font-black text-slate-800">{log.usuario_email}</div>
-                          </div>
-                       </div>
-                    ))}
-                    {filtered.length === 0 && <div className="text-center py-20 text-slate-300 font-extrabold">No hay registros para este módulo.</div>}
-                  </>
+             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+                {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500"/></div> : (
+                   filtered.map(log => (
+                      <div key={log.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col gap-1">
+                         <div className="flex justify-between items-center">
+                            <span className="text-[8px] font-black text-slate-400 uppercase">{new Date(log.created_at).toLocaleString()}</span>
+                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-100 text-blue-700 uppercase">{log.accion}</span>
+                         </div>
+                         <p className="text-[11px] font-bold text-slate-800 leading-tight">{log.detalles}</p>
+                         <span className="text-[8px] font-medium text-slate-500 italic truncate">{log.usuario_email}</span>
+                      </div>
+                   ))
                 )}
              </div>
           </div>

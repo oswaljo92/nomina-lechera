@@ -72,10 +72,10 @@ export default function LoginPage() {
       <div className="absolute top-[-10%] left-[-10%] w-96 h-96 bg-blue-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-50 animate-pulse"></div>
       <div className="absolute bottom-[-10%] right-[-10%] w-96 h-96 bg-purple-500 rounded-full mix-blend-multiply filter blur-[128px] opacity-50 animate-pulse" style={{ animationDelay: '2s' }}></div>
 
-      <div className="w-full max-w-md p-8 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl relative z-10 transition-all duration-300">
+      <div className="w-full max-w-md p-6 sm:p-8 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-2xl relative z-10 mx-4">
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-extrabold tracking-tight mb-2 bg-gradient-to-r from-blue-300 to-cyan-200 bg-clip-text text-transparent">Nómina Lechera</h1>
-          <p className="text-blue-200 text-sm">Gestiona la recepción y precios eficientemente</p>
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-2 bg-gradient-to-r from-blue-300 to-cyan-200 bg-clip-text text-transparent italic">Nómina Lechera</h1>
+          <p className="text-blue-200 text-xs sm:text-sm font-semibold uppercase tracking-widest">Gestión de Recepción</p>
         </div>
 
         <form className="space-y-6" onSubmit={handleLogin}>
@@ -105,7 +105,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="flex gap-4">
+          <div className="flex flex-col sm:flex-row gap-3">
              <button
                type="submit"
                disabled={isLoading}
@@ -132,11 +132,11 @@ export default function LoginPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full mx-4 overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="bg-red-500 p-4 flex items-center justify-between">
-              <div className="flex items-center gap-2 text-white font-bold">
+              <div className="flex items-center gap-2 text-white font-extrabold text-sm">
                 <AlertCircle className="w-5 h-5" />
-                <span>Error de Acceso</span>
+                <span>Problema de Acceso</span>
               </div>
-              <button onClick={() => setErrorModal(null)} className="text-white hover:text-red-200 transition-colors">
+              <button onClick={() => setErrorModal(null)} className="text-white hover:bg-white/10 p-1 rounded-lg">
                 <X size={20}/>
               </button>
             </div>

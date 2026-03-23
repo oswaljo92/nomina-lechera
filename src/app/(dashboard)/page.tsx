@@ -134,21 +134,21 @@ export default function DashboardPage() {
     <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-700 fade-in pb-20">
       
       {/* Header Dashboard */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between bg-white p-4 sm:p-6 rounded-2xl shadow-sm border border-slate-200 gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-slate-800 flex items-center gap-3">
-            <TrendingUp className="text-blue-500" />
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-800 flex items-center gap-3">
+            <TrendingUp className="text-blue-500 shrink-0" />
             Dashboard Ejecutivo
           </h1>
-          <p className="text-slate-500 mt-1">Análisis de rendimiento, litros y parámetros de calidad</p>
+          <p className="text-slate-500 mt-1 text-sm sm:text-base">Análisis de rendimiento, litros y parámetros de calidad</p>
         </div>
-        <div className="flex items-center gap-4 mt-4 md:mt-0">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
-            <Filter size={16} className="text-slate-400 ml-2" />
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg w-full sm:w-auto">
+            <Filter size={16} className="text-slate-400 ml-2 shrink-0" />
             <select 
               value={filtroProveedor} 
               onChange={e => setFiltroProveedor(e.target.value)}
-              className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer"
+              className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer grow"
             >
               <option value="Todos">Todos los Proveedores</option>
               <option value="PROPIO">Solo Propios</option>
@@ -159,25 +159,25 @@ export default function DashboardPage() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Volumen Total Semana', value: `${totalLitros === 0 ? '47,000' : totalLitros.toLocaleString()} L`, color: 'from-blue-500 to-cyan-400' },
           { label: 'Proveedores Activos', value: proveedoresActivos === 0 ? '142' : proveedoresActivos, color: 'from-indigo-500 to-purple-400' },
           { label: 'Acidez Promedio', value: `${acidezPromedio === 0 ? '16.4' : acidezPromedio.toFixed(1)} °D`, color: 'from-teal-500 to-emerald-400' },
           { label: 'Temp Promedio', value: `${tempPromedio === 0 ? '4.2' : tempPromedio.toFixed(1)} °C`, color: 'from-orange-500 to-amber-400' },
         ].map((kpi, i) => (
-          <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 relative overflow-hidden group hover:shadow-lg transition-all duration-300">
+          <div key={i} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 relative overflow-hidden group hover:shadow-lg transition-all duration-300">
             <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-br ${kpi.color} opacity-10 rounded-bl-full -mr-10 -mt-10 transition-transform group-hover:scale-110`}></div>
-            <h3 className="text-sm font-semibold text-slate-500 uppercase tracking-widest mb-2 z-10 relative">{kpi.label}</h3>
-            <p className="text-4xl font-extrabold text-slate-800 z-10 relative">{kpi.value}</p>
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2 z-10 relative">{kpi.label}</h3>
+            <p className="text-3xl sm:text-4xl font-extrabold text-slate-800 z-10 relative">{kpi.value}</p>
           </div>
         ))}
       </div>
 
       {/* Gráfico Principal */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <h3 className="font-bold text-slate-700 mb-6 text-lg">Volumen Semanal de Leche (Miércoles a Martes)</h3>
-        <div className="h-80 w-full">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+        <h3 className="font-bold text-slate-700 mb-6 text-base sm:text-lg">Volumen Semanal de Leche (Miércoles a Martes)</h3>
+        <div className="h-64 sm:h-80 w-full text-xs sm:text-sm">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={litrosSemanaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
               <defs>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Doble Pie y Tasas */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
           <h3 className="font-bold text-slate-700 text-center text-sm uppercase tracking-wide">Proveedor</h3>
           <div className="h-64">
@@ -245,10 +245,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Gráfico Calidad Ondulado Interactivo */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-           <h3 className="font-bold text-slate-700 text-lg">Parámetros de Calidad (Tendencia Semanal)</h3>
-           <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 gap-4">
+           <h3 className="font-bold text-slate-700 text-base sm:text-lg">Parámetros de Calidad (Tendencia Semanal)</h3>
+           <div className="flex flex-wrap gap-2">
               {Object.keys(showQuality).map(k => (
                 <button 
                   key={k} 
@@ -261,7 +261,7 @@ export default function DashboardPage() {
            </div>
         </div>
         
-        <div className="h-80 w-full">
+        <div className="h-64 sm:h-80 w-full text-xs sm:text-sm">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={calidadData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
@@ -279,10 +279,10 @@ export default function DashboardPage() {
       </div>
 
       {/* Nuevo Gráfico: Volumenes vs Precios */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-           <h3 className="font-bold text-slate-700 text-lg">Volúmenes Recolectados vs Precios Base</h3>
-           <div className="flex flex-wrap gap-2 mt-2 md:mt-0">
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+        <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 gap-4">
+           <h3 className="font-bold text-slate-700 text-base sm:text-lg">Volúmenes Recolectados vs Precios Base</h3>
+           <div className="flex flex-wrap gap-2">
               {Object.keys(showVolPrec).map(k => (
                 <button 
                   key={k} 
@@ -295,7 +295,7 @@ export default function DashboardPage() {
            </div>
         </div>
 
-        <div className="h-80 w-full">
+        <div className="h-64 sm:h-80 w-full text-xs sm:text-sm">
            <ResponsiveContainer width="100%" height="100%">
              <ComposedChart data={volPrecData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                <CartesianGrid stroke="#f5f5f5" vertical={false}/>
