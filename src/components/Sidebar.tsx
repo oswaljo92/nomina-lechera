@@ -111,7 +111,7 @@ export default function Sidebar({
               className="shrink-0 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
               title="Editar mi perfil"
             >
-              <Settings2 size={16} />
+              <Settings2 size={20} />
             </button>
           )}
         </div>

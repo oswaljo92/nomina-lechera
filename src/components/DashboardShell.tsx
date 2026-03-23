@@ -100,7 +100,7 @@ export default function DashboardShell({ children, userRole, userEmail, userName
           </button>
           <h1 className="text-lg font-bold bg-gradient-to-r from-blue-600 to-cyan-500 bg-clip-text text-transparent">Nómina Lechera</h1>
           <button onClick={() => setIsProfileOpen(true)} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors" aria-label="Mi perfil">
-            <Settings2 className="h-5 w-5" />
+            <Settings2 className="h-6 w-6" />
           </button>
         </header>
 
