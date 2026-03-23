@@ -397,47 +397,74 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
              onChange={e=>setBusqueda(e.target.value)}
              className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full"
            />
-           <div className="flex gap-2 items-center overflow-x-auto">
+           <div className="flex flex-wrap gap-2 items-center">
               {onOpenBitacora && (
-                <button onClick={onOpenBitacora} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <button onClick={onOpenBitacora} className="flex items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                   <History size={16}/> Vitácora
                 </button>
               )}
-              <button onClick={() => fileRef.current?.click()} className="flex shrink-0 items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Upload size={16}/> CSV
               </button>
               <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={handleUpload}/>
-              <button onClick={() => downloadCSV(tasas, 'tasas_bcv')} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+              <button onClick={() => downloadCSV(tasas, 'tasas_bcv')} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Download size={16}/> Exportar
               </button>
-              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
+              <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
               </button>
            </div>
         </div>
-        <table className="min-w-full divide-y divide-slate-200">
-           <thead className="bg-slate-50">
-              <tr>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Fecha (DD-MM-YYYY)</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Semana Ganadera</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Día</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tasa BS BCV</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
-              </tr>
-           </thead>
-           <tbody className="divide-y divide-slate-200 p-4">
-              {tasasFiltradas.map(t => {
-                 const match = semanasGanaderas.find(s => s.fecha === t.fecha)
-                 const semName = match ? `Semana ${match.semana}` : '-'
-                 return <TasasRow key={t.fecha} t={t} actualizarTasa={actualizarTasa} semana={semName} />
-              })}
-              {tasasFiltradas.length === 0 && (
-                 <tr>
-                    <td colSpan={5} className="py-8 text-center text-slate-400 font-bold border-t">No se detectaron registros de Tasas BCV</td>
-                 </tr>
-              )}
-           </tbody>
-        </table>
+        {/* Vista móvil - Tarjetas */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {tasasFiltradas.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 font-bold">Sin registros</p>
+          ) : tasasFiltradas.map(t => {
+            const match = semanasGanaderas.find(s => s.fecha === t.fecha)
+            const semName = match ? `Semana ${match.semana}` : '-'
+            return (
+              <div key={t.fecha} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-extrabold text-slate-800">{formatDate(t.fecha)}</p>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      <span className="bg-blue-50 border border-blue-100 px-2 py-0.5 rounded text-[10px] font-bold text-blue-700 uppercase">{semName}</span>
+                      <span className="text-xs text-slate-500 capitalize">{t.dia}</span>
+                    </div>
+                  </div>
+                  <span className="text-lg font-black text-slate-800 shrink-0">{t.tasa} Bs</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Vista escritorio - Tabla */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+               <tr>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Fecha (DD-MM-YYYY)</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Semana Ganadera</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Día</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tasa BS BCV</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 p-4">
+               {tasasFiltradas.map(t => {
+                  const match = semanasGanaderas.find(s => s.fecha === t.fecha)
+                  const semName = match ? `Semana ${match.semana}` : '-'
+                  return <TasasRow key={t.fecha} t={t} actualizarTasa={actualizarTasa} semana={semName} />
+               })}
+               {tasasFiltradas.length === 0 && (
+                  <tr>
+                     <td colSpan={5} className="py-8 text-center text-slate-400 font-bold border-t">No se detectaron registros de Tasas BCV</td>
+                  </tr>
+               )}
+            </tbody>
+          </table>
+        </div>
 
         {isModalOpen && (
           <div onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
@@ -588,43 +615,65 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
              onChange={e=>setBusqueda(e.target.value)}
              className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full"
            />
-           <div className="flex gap-2 items-center overflow-x-auto">
+           <div className="flex flex-wrap gap-2 items-center">
               {onOpenBitacora && (
-                <button onClick={onOpenBitacora} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <button onClick={onOpenBitacora} className="flex items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                   <History size={16}/> Vitácora
                 </button>
               )}
-              <button onClick={() => fileRef.current?.click()} className="flex shrink-0 items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Upload size={16}/> Subir CSV
               </button>
               <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={handleUpload}/>
-              <button onClick={() => downloadCSV(crios, 'tabla_crioscopia')} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+              <button onClick={() => downloadCSV(crios, 'tabla_crioscopia')} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Download size={16}/> Exportar
               </button>
-              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
+              <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
               </button>
            </div>
         </div>
-        <table className="min-w-full divide-y divide-slate-200">
-           <thead className="bg-slate-50">
-              <tr>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Punto (°H)</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">% Dcto Agua</th>
-                 <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
-              </tr>
-           </thead>
-           <tbody className="divide-y divide-slate-200 p-4">
-              {criosFiltrados.map(t => (
-                 <CriosRow key={t.punto_crioscopico} t={t} actualizarCrio={actualizarCrio} />
-              ))}
-              {criosFiltrados.length === 0 && (
-                 <tr>
-                    <td colSpan={3} className="py-8 text-center text-slate-400 font-bold border-t">No se detectaron registros</td>
-                 </tr>
-              )}
-           </tbody>
-        </table>
+        {/* Vista móvil - Tarjetas */}
+        <div className="sm:hidden divide-y divide-slate-100">
+          {criosFiltrados.length === 0 ? (
+            <p className="py-8 text-center text-slate-400 font-bold">Sin registros</p>
+          ) : criosFiltrados.map(t => (
+            <div key={t.punto_crioscopico} className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Punto Crioscópico</p>
+                <span className="font-black text-purple-800 text-xl">{t.punto_crioscopico}</span>
+                <span className="text-xs text-slate-500 ml-1">°H</span>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">% Dcto Agua</p>
+                <span className="font-black text-red-600 text-xl">{t.porcentaje_agua}%</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Vista escritorio - Tabla */}
+        <div className="hidden sm:block overflow-x-auto">
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead className="bg-slate-50">
+               <tr>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Punto (°H)</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">% Dcto Agua</th>
+                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
+               </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200 p-4">
+               {criosFiltrados.map(t => (
+                  <CriosRow key={t.punto_crioscopico} t={t} actualizarCrio={actualizarCrio} />
+               ))}
+               {criosFiltrados.length === 0 && (
+                  <tr>
+                     <td colSpan={3} className="py-8 text-center text-slate-400 font-bold border-t">No se detectaron registros</td>
+                  </tr>
+               )}
+            </tbody>
+          </table>
+        </div>
 
         {isModalOpen && (
           <div onClick={(e) => { if(e.target === e.currentTarget) setIsModalOpen(false) }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
@@ -1193,11 +1242,11 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
   }, [])
 
   const tabsItems = [
-    { id: 'usuarios', label: 'Gestión de Usuarios', icon: Users },
-    { id: 'tasas', label: 'Tasas BCV', icon: RefreshCcw },
-    { id: 'crioscopia', label: 'Tabla Crioscopía', icon: FileSpreadsheet },
-    { id: 'precios', label: 'Precios', icon: Calculator },
-    { id: 'vitacora', label: 'Vitácora', icon: History, adminOnly: true },
+    { id: 'usuarios', label: 'Gestión de Usuarios', shortLabel: 'Usuarios', icon: Users },
+    { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
+    { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
+    { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
+    { id: 'vitacora', label: 'Vitácora', shortLabel: 'Vitácora', icon: History, adminOnly: true },
   ]
 
   return (
@@ -1207,18 +1256,20 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
         <p className="text-slate-500 mt-1">Parámetros avanzados, bases de datos y control de accesos.</p>
       </div>
 
-      <div className="flex space-x-2 bg-slate-200/50 p-1.5 rounded-xl overflow-x-auto">
+      <div className="flex flex-wrap gap-1.5 bg-slate-200/50 p-1.5 rounded-xl">
         {tabsItems.filter(i => !i.adminOnly || currentUser?.rol === 'admin').map(item => {
            const Icon = item.icon
            return (
              <button
                key={item.id}
                onClick={() => setTab(item.id)}
-               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+               className={`flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg text-xs sm:text-sm font-semibold transition-all flex-1 min-w-[70px] ${
                  tab === item.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
                }`}
              >
-               <Icon size={16} /> {item.label}
+               <Icon size={14} />
+               <span className="sm:hidden">{(item as any).shortLabel}</span>
+               <span className="hidden sm:inline">{item.label}</span>
              </button>
            )
         })}

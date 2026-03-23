@@ -3,7 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X } from 'lucide-react'
+import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 
@@ -12,13 +12,15 @@ interface SidebarProps {
   userEmail: string
   userName?: string
   onClose?: () => void
+  onProfileOpen?: () => void
 }
 
-export default function Sidebar({ 
-  userRole, 
-  userEmail, 
+export default function Sidebar({
+  userRole,
+  userEmail,
   userName = 'Usuario',
-  onClose 
+  onClose,
+  onProfileOpen
 }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -98,11 +100,20 @@ export default function Sidebar({
           <div className="h-10 w-10 min-w-[40px] rounded-full bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold uppercase shadow-lg border border-white/10">
             {userName.charAt(0)}
           </div>
-          <div className="flex flex-col min-w-0">
+          <div className="flex flex-col min-w-0 flex-1">
             <span className="text-sm font-bold text-slate-50 leading-tight break-words">{userName}</span>
             <span className="truncate text-[10px] text-slate-400 leading-tight mt-0.5">{userEmail}</span>
             <span className="text-[10px] text-blue-400 font-medium uppercase tracking-wider mt-0.5">{userRole}</span>
           </div>
+          {onProfileOpen && (
+            <button
+              onClick={onProfileOpen}
+              className="shrink-0 p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              title="Editar mi perfil"
+            >
+              <Settings2 size={16} />
+            </button>
+          )}
         </div>
         <button
           onClick={handleLogout}

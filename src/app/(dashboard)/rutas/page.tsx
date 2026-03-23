@@ -155,7 +155,7 @@ export default function RutasPage() {
           ) : filteredRutas.map((ruta) => (
             <div key={ruta.id} className="p-4 flex items-start gap-3">
               {isAdmin && (
-                <input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} className="mt-1 w-4 h-4 shrink-0" />
+                <input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} className="mt-1 w-5 h-5 shrink-0 rounded" />
               )}
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">

@@ -419,7 +419,7 @@ export default function RecepcionPage() {
                     <div className="p-10 text-center text-slate-400 font-bold text-sm">Sin registros</div>
                   ) : filteredCamiones.map(hc => (
                     <div key={hc.id} className="p-4 flex items-start gap-3">
-                      <input type="checkbox" checked={selectedHistorialIds.has(hc.id)} onChange={() => toggleSelection(hc.id)} className="mt-1 w-4 h-4 shrink-0" />
+                      <input type="checkbox" checked={selectedHistorialIds.has(hc.id)} onChange={() => toggleSelection(hc.id)} className="mt-1 w-5 h-5 shrink-0 rounded" />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
