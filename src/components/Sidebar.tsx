@@ -1,9 +1,9 @@
 'use client'
 
-import React from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2, ChevronDown } from 'lucide-react'
+import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2, ChevronDown, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useFabrica } from '@/contexts/FabricaContext'
@@ -27,9 +27,20 @@ export default function Sidebar({
   const router = useRouter()
   const supabase = createClient()
   const { fabricas, selectedFabrica, setSelectedFabricaId } = useFabrica()
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const handleLogout = async () => {
-    // Limpiar el token de sesión para permitir nuevo login desde cualquier dispositivo
     await supabase.auth.updateUser({ data: { session_token: null } })
     if (typeof window !== 'undefined') {
       localStorage.removeItem('_nl_session')
@@ -45,7 +56,6 @@ export default function Sidebar({
     { name: 'Rutas', href: '/rutas', icon: Map },
   ]
 
-  // Add configuration only for admin
   if (userRole === 'admin') {
     menuItems.push({ name: 'Configuración', href: '/configuracion', icon: Settings })
   }
@@ -54,7 +64,7 @@ export default function Sidebar({
     <aside className="h-full w-full bg-slate-900 text-white flex flex-col shadow-2xl relative">
       {/* Botón cerrar en Mobile */}
       {onClose && (
-        <button 
+        <button
           onClick={onClose}
           className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white lg:hidden z-10"
         >
@@ -67,19 +77,56 @@ export default function Sidebar({
         <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
           Nómina Lechera
         </h1>
-        {/* Selector de Fábrica */}
+
+        {/* Selector de Fábrica — dropdown personalizado */}
         {fabricas.length > 0 && (
-          <div className="w-full relative">
-            <select
-              value={selectedFabrica?.id || ''}
-              onChange={e => setSelectedFabricaId(e.target.value)}
-              className="w-full appearance-none bg-slate-800 border border-slate-600 text-slate-100 text-xs font-bold rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          <div className="w-full relative" ref={dropdownRef}>
+            {/* Botón trigger */}
+            <button
+              onClick={() => setDropdownOpen(prev => !prev)}
+              className="w-full flex items-center justify-between gap-2 bg-slate-800 border border-slate-600 hover:border-slate-500 text-slate-100 rounded-lg px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {fabricas.map(f => (
-                <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>
-              ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+              <div className="flex items-center gap-2 min-w-0">
+                <Check className="h-3.5 w-3.5 text-blue-400 shrink-0" />
+                <span className="text-xs font-bold truncate">
+                  {selectedFabrica ? selectedFabrica.nombre : 'Seleccionar...'}
+                </span>
+              </div>
+              <ChevronDown
+                className={`text-slate-400 shrink-0 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
+                size={14}
+              />
+            </button>
+
+            {/* Panel desplegable */}
+            {dropdownOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 overflow-hidden">
+                {fabricas.map(f => {
+                  const isSelected = f.id === selectedFabrica?.id
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => { setSelectedFabricaId(f.id); setDropdownOpen(false) }}
+                      className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-slate-700 last:border-0 ${
+                        isSelected
+                          ? 'bg-blue-600/25 hover:bg-blue-600/35'
+                          : 'hover:bg-slate-700/60'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-300' : 'text-slate-100'}`}>
+                          {f.nombre}
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Cód. {f.codigo}
+                        </div>
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 text-blue-400 shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
