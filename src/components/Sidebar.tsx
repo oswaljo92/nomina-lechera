@@ -80,48 +80,54 @@ export default function Sidebar({
 
         {/* Selector de Fábrica — dropdown personalizado */}
         {fabricas.length > 0 && (
-          <div className="w-full relative" ref={dropdownRef}>
+          <div className="w-full relative z-50" ref={dropdownRef}>
             {/* Botón trigger */}
             <button
+              type="button"
               onClick={() => setDropdownOpen(prev => !prev)}
-              className="w-full flex items-center justify-between gap-2 bg-slate-800 border border-slate-600 hover:border-slate-500 text-slate-100 rounded-lg px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full flex items-center justify-between gap-2 bg-white border border-slate-300 hover:border-blue-400 text-gray-900 rounded-lg px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Check className="h-3.5 w-3.5 text-blue-400 shrink-0" />
-                <span className="text-xs font-bold truncate">
+                <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span className="text-xs font-bold truncate text-gray-900">
                   {selectedFabrica ? selectedFabrica.nombre : 'Seleccionar...'}
                 </span>
               </div>
               <ChevronDown
-                className={`text-slate-400 shrink-0 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
+                className={`text-gray-500 shrink-0 transition-transform duration-200 ${dropdownOpen ? 'rotate-180' : ''}`}
                 size={14}
               />
             </button>
 
             {/* Panel desplegable */}
             {dropdownOpen && (
-              <div className="absolute top-full left-0 right-0 mt-1.5 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl z-50 overflow-hidden">
+              <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
                 {fabricas.map(f => {
                   const isSelected = f.id === selectedFabrica?.id
                   return (
                     <button
                       key={f.id}
-                      onClick={() => { setSelectedFabricaId(f.id); setDropdownOpen(false) }}
-                      className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-slate-700 last:border-0 ${
+                      type="button"
+                      onMouseDown={e => {
+                        e.preventDefault()
+                        setSelectedFabricaId(f.id)
+                        setDropdownOpen(false)
+                      }}
+                      className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${
                         isSelected
-                          ? 'bg-blue-600/25 hover:bg-blue-600/35'
-                          : 'hover:bg-slate-700/60'
+                          ? 'bg-blue-50 hover:bg-blue-100'
+                          : 'bg-white hover:bg-gray-50'
                       }`}
                     >
                       <div className="min-w-0">
-                        <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-300' : 'text-slate-100'}`}>
+                        <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
                           {f.nombre}
                         </div>
-                        <div className="text-[10px] text-slate-400 mt-0.5">
+                        <div className="text-[10px] text-gray-400 mt-0.5">
                           Cód. {f.codigo}
                         </div>
                       </div>
-                      {isSelected && <Check className="h-4 w-4 text-blue-400 shrink-0" />}
+                      {isSelected && <Check className="h-4 w-4 text-blue-500 shrink-0" />}
                     </button>
                   )
                 })}
