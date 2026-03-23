@@ -30,22 +30,55 @@ export default function LoginPage() {
     setIsLoading(true)
     setErrorModal(null)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
       if (error.message.includes('Invalid login credentials')) {
-         setErrorModal('Contraseña o correo electrónico incorrectos. Verifica tus credenciales.')
+        setErrorModal('Contraseña o correo electrónico incorrectos. Verifica tus credenciales.')
       } else {
-         setErrorModal('Error de autenticación: ' + error.message)
+        setErrorModal('Error de autenticación: ' + error.message)
       }
       setIsLoading(false)
-    } else {
-      router.push('/')
-      router.refresh()
+      return
     }
+
+    // Verificar si el usuario está activo en perfiles_usuarios
+    const { data: { user } } = await supabase.auth.getUser()
+    if (user) {
+      const { data: profile } = await supabase
+        .from('perfiles_usuarios')
+        .select('activo')
+        .eq('id', user.id)
+        .single()
+
+      if (profile?.activo === false) {
+        await supabase.auth.signOut()
+        setErrorModal('Tu cuenta ha sido bloqueada o eliminada. Contacta al administrador del sistema.')
+        setIsLoading(false)
+        return
+      }
+
+      // Verificar si ya existe una sesión activa en otro dispositivo
+      const existingToken = user.user_metadata?.session_token
+      const localToken = typeof window !== 'undefined' ? localStorage.getItem('_nl_session') : null
+
+      if (existingToken && existingToken !== localToken) {
+        await supabase.auth.signOut()
+        setErrorModal('Ya existe una sesión activa en otro dispositivo o navegador. Cierra esa sesión e intenta de nuevo.')
+        setIsLoading(false)
+        return
+      }
+
+      // Registrar la nueva sesión con un token único
+      const newToken = crypto.randomUUID()
+      await supabase.auth.updateUser({ data: { session_token: newToken } })
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('_nl_session', newToken)
+      }
+    }
+
+    router.push('/')
+    router.refresh()
   }
 
   const handleSignUp = async (e: React.MouseEvent) => {

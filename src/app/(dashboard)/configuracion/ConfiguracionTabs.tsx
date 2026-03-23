@@ -107,17 +107,17 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
      <div className="space-y-6 fade-in">
        {/* Listado */}
        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          <div className="bg-slate-50 flex justify-between p-4 border-b border-slate-200 items-center">
+          <div className="bg-slate-50 flex flex-col sm:flex-row sm:justify-between sm:items-center p-4 border-b border-slate-200 gap-3">
              <div>
                <h3 className="font-bold text-slate-800 text-lg">{verBorrados ? 'Usuarios Eliminados' : 'Directorio de Usuarios'}</h3>
                <p className="text-xs text-slate-500">{verBorrados ? 'Usuarios que no tienen acceso al sistema.' : 'Personal con acceso al sistema.'}</p>
              </div>
-             <div className="flex gap-2">
-                <button onClick={()=>setVerBorrados(!verBorrados)} className="text-sm font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 bg-white px-4 py-2 rounded-lg shadow-sm transition-colors">
+             <div className="flex gap-2 flex-wrap">
+                <button onClick={()=>setVerBorrados(!verBorrados)} className="flex-1 sm:flex-none text-sm font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 bg-white px-4 py-2 rounded-lg shadow-sm transition-colors text-center">
                    {verBorrados ? 'Ver Activos' : 'Ver Borrados'}
                 </button>
                 {!verBorrados && (
-                  <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors">
+                  <button onClick={() => setIsCreateModalOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors">
                      <Plus size={16}/> Nuevo Usuario
                   </button>
                 )}
@@ -386,16 +386,18 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
-           <h3 className="font-bold text-slate-800 hidden md:block">Tasas Registradas</h3>
-           <div className="flex gap-2 items-center w-full md:w-auto overflow-x-auto">
-              <input 
-                type="text" 
-                placeholder="Buscar fecha, día o tasa..." 
-                value={busqueda} 
-                onChange={e=>setBusqueda(e.target.value)} 
-                className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-1.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full md:w-56" 
-              />
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col gap-3">
+           <div className="flex justify-between items-center">
+             <h3 className="font-bold text-slate-800">Tasas Registradas</h3>
+           </div>
+           <input
+             type="text"
+             placeholder="Buscar fecha, día o tasa..."
+             value={busqueda}
+             onChange={e=>setBusqueda(e.target.value)}
+             className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full"
+           />
+           <div className="flex gap-2 items-center overflow-x-auto">
               {onOpenBitacora && (
                 <button onClick={onOpenBitacora} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                   <History size={16}/> Vitácora
@@ -408,7 +410,7 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
               <button onClick={() => downloadCSV(tasas, 'tasas_bcv')} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Download size={16}/> Exportar
               </button>
-              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm">
+              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
               </button>
            </div>
@@ -575,16 +577,18 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden relative">
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
-           <h3 className="font-bold text-slate-800 hidden md:block">Puntos Crioscópicos</h3>
-           <div className="flex gap-2 items-center w-full md:w-auto overflow-x-auto">
-              <input 
-                type="text" 
-                placeholder="Buscar punto o %..." 
-                value={busqueda} 
-                onChange={e=>setBusqueda(e.target.value)} 
-                className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-1.5 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full md:w-56" 
-              />
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col gap-3">
+           <div className="flex justify-between items-center">
+             <h3 className="font-bold text-slate-800">Puntos Crioscópicos</h3>
+           </div>
+           <input
+             type="text"
+             placeholder="Buscar punto o %..."
+             value={busqueda}
+             onChange={e=>setBusqueda(e.target.value)}
+             className="border border-slate-300 bg-white text-slate-900 font-medium placeholder-slate-500 rounded-lg p-2 px-3 text-sm focus:ring-2 focus:ring-blue-500 shadow-sm w-full"
+           />
+           <div className="flex gap-2 items-center overflow-x-auto">
               {onOpenBitacora && (
                 <button onClick={onOpenBitacora} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                   <History size={16}/> Vitácora
@@ -597,7 +601,7 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
               <button onClick={() => downloadCSV(crios, 'tabla_crioscopia')} className="flex shrink-0 items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
                 <Download size={16}/> Exportar
               </button>
-              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm">
+              <button onClick={() => setIsModalOpen(true)} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
               </button>
            </div>
@@ -803,13 +807,16 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         if (data && data.length > 0) {
            setSemanas(data)
            
-           // Detect start of current week (Wednesday)
+           // Detectar el miércoles de la semana actual usando fecha LOCAL (evita desfase UTC)
            const now = new Date()
            const day = now.getDay()
            const diff = (day < 3 ? 7 : 0) + day - 3
            const prevWed = new Date(now)
            prevWed.setDate(now.getDate() - diff)
-           const wedStr = prevWed.toISOString().split('T')[0]
+           const y = prevWed.getFullYear()
+           const mo = String(prevWed.getMonth() + 1).padStart(2, '0')
+           const d = String(prevWed.getDate()).padStart(2, '0')
+           const wedStr = `${y}-${mo}-${d}`
            
            const exist = data.find((d:any) => d.fecha === wedStr)
            if (exist) {

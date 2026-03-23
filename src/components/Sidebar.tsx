@@ -25,6 +25,11 @@ export default function Sidebar({
   const supabase = createClient()
 
   const handleLogout = async () => {
+    // Limpiar el token de sesión para permitir nuevo login desde cualquier dispositivo
+    await supabase.auth.updateUser({ data: { session_token: null } })
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('_nl_session')
+    }
     await supabase.auth.signOut()
     router.push('/login')
   }
