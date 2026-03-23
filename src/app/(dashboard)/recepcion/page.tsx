@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2, Save, Search, Loader2, List, FileSpreadsheet, CheckCircle2, AlertCircle, Edit2, X, History, RefreshCcw } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -28,6 +28,7 @@ export default function RecepcionPage() {
   const [selectedHistorialIds, setSelectedHistorialIds] = useState<Set<string>>(new Set())
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
+  const [selectedSemanaHistorial, setSelectedSemanaHistorial] = useState<string>('')
 
   const [camion, setCamion] = useState<{
     id?: string,
@@ -331,17 +332,53 @@ export default function RecepcionPage() {
     loadHistorial()
   }
 
+  // Semana ganadera: miércoles a martes
+  const getSemanaGanadera = (isoDate: string): string => {
+    const p = isoDate.substring(0, 10).split('-')
+    const d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+    const daysSinceWed = (d.getDay() - 3 + 7) % 7
+    const wed = new Date(d)
+    wed.setDate(d.getDate() - daysSinceWed)
+    return `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+  }
+
+  const formatSemanaLabel = (wedStr: string): string => {
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+
+  const semanasDisponibles = useMemo(() => {
+    const weeks = new Set<string>()
+    historialCamiones.forEach(hc => { if (hc.fecha_ingreso) weeks.add(getSemanaGanadera(hc.fecha_ingreso)) })
+    return Array.from(weeks).sort().reverse()
+  }, [historialCamiones])
+
+  // Auto-select most recent week when historial loads
+  useEffect(() => {
+    if (semanasDisponibles.length > 0 && !selectedSemanaHistorial) {
+      setSelectedSemanaHistorial(semanasDisponibles[0])
+    }
+  }, [semanasDisponibles])
+
   const filteredCamiones = historialCamiones.filter(hc => {
+     if (selectedSemanaHistorial && hc.fecha_ingreso && getSemanaGanadera(hc.fecha_ingreso) !== selectedSemanaHistorial) return false
+     if (!filtroHistorial) return true
      const t = filtroHistorial.toLowerCase()
      const codesStrings = hc.recepciones_detalle?.map((d:any) => d.ganaderos?.codigo_ganadero?.toLowerCase()).join(' ') || ''
      const nameStrings = hc.recepciones_detalle?.map((d:any) => d.ganaderos?.nombre?.toLowerCase()).join(' ') || ''
-
-     return hc.ticket_romana?.toLowerCase().includes(t) || 
+     return hc.ticket_romana?.toLowerCase().includes(t) ||
             hc.rutas?.nombre_ruta?.toLowerCase().includes(t) ||
             hc.fecha_ingreso?.includes(t) ||
             codesStrings.includes(t) ||
             nameStrings.includes(t)
   })
+
+  const totalLitrosSemana = filteredCamiones.reduce((acc, hc) => acc + Number(hc.litros_romana || 0), 0)
+  const totalLitrosPagarSemana = filteredCamiones.reduce((acc, hc) =>
+    acc + (hc.recepciones_detalle?.reduce((s:number, d:any) => s + Number(d.litros_a_pagar || 0), 0) || 0), 0)
 
   const formatearFecha = (iso: string) => {
     if (!iso) return ''
@@ -404,10 +441,40 @@ export default function RecepcionPage() {
 
       {tab === 'historial' && (
          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in">
-            <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col md:flex-row justify-between gap-4">
-               <div className="relative flex-1">
-                  <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-                  <input type="text" placeholder="Filtrar historial..." value={filtroHistorial} onChange={e => setFiltroHistorial(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-blue-500"/>
+            <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col gap-3">
+               {/* Selector de semana ganadera */}
+               <div className="flex gap-2 items-center flex-wrap">
+                  <span className="text-[10px] font-black text-slate-500 uppercase shrink-0">Semana:</span>
+                  {semanasDisponibles.length === 0 ? (
+                    <span className="text-xs text-slate-400">Sin registros</span>
+                  ) : semanasDisponibles.map(sem => (
+                    <button
+                      key={sem}
+                      onClick={() => { setSelectedSemanaHistorial(sem); setFiltroHistorial('') }}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${selectedSemanaHistorial === sem ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                    >
+                      {formatSemanaLabel(sem)}
+                    </button>
+                  ))}
+               </div>
+               {/* Barra de búsqueda + totales */}
+               <div className="flex flex-col sm:flex-row gap-3 items-center">
+                  <div className="relative flex-1 w-full">
+                     <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
+                     <input type="text" placeholder="Filtrar dentro de la semana..." value={filtroHistorial} onChange={e => setFiltroHistorial(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-blue-500"/>
+                  </div>
+                  {selectedSemanaHistorial && (
+                    <div className="flex gap-3 shrink-0">
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-center">
+                        <div className="text-[10px] font-black text-blue-500 uppercase">Litros Romana</div>
+                        <div className="text-base font-black text-blue-800">{totalLitrosSemana.toLocaleString('es-VE')} L</div>
+                      </div>
+                      <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-center">
+                        <div className="text-[10px] font-black text-emerald-600 uppercase">Total a Pagar</div>
+                        <div className="text-base font-black text-emerald-800">{totalLitrosPagarSemana.toLocaleString('es-VE')} L</div>
+                      </div>
+                    </div>
+                  )}
                </div>
             </div>
             
