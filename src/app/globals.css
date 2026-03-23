@@ -24,7 +24,8 @@ body {
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
   select,
   textarea {
-    background-color: white;
-    color: #111827;
+    background-color: white !important;
+    color: #111827 !important;
+    color-scheme: light;
   }
 }

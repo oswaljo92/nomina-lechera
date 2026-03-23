@@ -493,11 +493,11 @@ export default function RecepcionPage() {
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Ticket Romana</label>
-                  <input type="text" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.ticket_romana} onChange={e => setCamion({...camion, ticket_romana: e.target.value})}/>
+                  <input type="text" placeholder="Ej.: 21000" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.ticket_romana} onChange={e => setCamion({...camion, ticket_romana: e.target.value})}/>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Placa</label>
-                  <input type="text" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.placa} onChange={e => setCamion({...camion, placa: e.target.value})}/>
+                  <input type="text" placeholder="Ej.: A45CKP" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.placa} onChange={e => setCamion({...camion, placa: e.target.value})}/>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Fecha</label>
@@ -505,7 +505,7 @@ export default function RecepcionPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Cód. Ruta</label>
-                  <input type="text" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.codigo_ruta} onChange={e => handleCamionRutaChange(e.target.value)}/>
+                  <input type="text" placeholder="Ej.: 300" className="w-full bg-white border border-slate-300 rounded-lg p-2.5 text-sm font-bold" value={camion.codigo_ruta} onChange={e => handleCamionRutaChange(e.target.value)}/>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Nombre Ruta</label>

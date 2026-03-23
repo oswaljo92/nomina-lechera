@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon } from 'lucide-react'
-import html2canvas from 'html2canvas'
+import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
 
 // CSV Utils
@@ -949,11 +949,17 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
   const exportAsImage = async () => {
     if (!tableRef.current) return
     try {
-      const canvas = await html2canvas(tableRef.current, { scale: 2, backgroundColor: '#ffffff' })
-      const imgData = canvas.toDataURL('image/png')
+      const el = tableRef.current
+      const dataUrl = await toPng(el, {
+        backgroundColor: '#ffffff',
+        pixelRatio: 2,
+        width: el.scrollWidth,
+        height: el.scrollHeight,
+        style: { overflow: 'visible' }
+      })
       const link = document.createElement('a')
       link.download = `PreciosSemanales-${selectedSemana}.png`
-      link.href = imgData
+      link.href = dataUrl
       link.click()
     } catch (e) {
       alert("Error exportando a imagen")
