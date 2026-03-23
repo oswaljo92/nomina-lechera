@@ -3,9 +3,10 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2 } from 'lucide-react'
+import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2, ChevronDown } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import { useFabrica } from '@/contexts/FabricaContext'
 
 interface SidebarProps {
   userRole: 'admin' | 'analista'
@@ -25,6 +26,7 @@ export default function Sidebar({
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
+  const { fabricas, selectedFabrica, setSelectedFabricaId } = useFabrica()
 
   const handleLogout = async () => {
     // Limpiar el token de sesión para permitir nuevo login desde cualquier dispositivo
@@ -61,10 +63,25 @@ export default function Sidebar({
       )}
 
       {/* Header Sidebar */}
-      <div className="flex h-20 items-center justify-center border-b border-slate-800 px-6 shrink-0">
+      <div className="flex flex-col items-center justify-center border-b border-slate-800 px-6 pt-5 pb-4 shrink-0 gap-3">
         <h1 className="text-xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-cyan-300 bg-clip-text text-transparent">
           Nómina Lechera
         </h1>
+        {/* Selector de Fábrica */}
+        {fabricas.length > 0 && (
+          <div className="w-full relative">
+            <select
+              value={selectedFabrica?.id || ''}
+              onChange={e => setSelectedFabricaId(e.target.value)}
+              className="w-full appearance-none bg-slate-800 border border-slate-600 text-slate-100 text-xs font-bold rounded-lg px-3 py-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              {fabricas.map(f => (
+                <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={14} />
+          </div>
+        )}
       </div>
 
       {/* Navegación */}

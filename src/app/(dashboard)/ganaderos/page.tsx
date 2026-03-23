@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, Loader2, X, Search, AlertCircle, History, RefreshCcw } from 'lucide-react'
 import { logAction } from '@/lib/log-utils'
+import { useFabrica } from '@/contexts/FabricaContext'
 
 export default function GanaderosPage() {
   const supabase = createClient()
+  const { selectedFabricaId, selectedFabrica } = useFabrica()
   const [ganaderos, setGanaderos] = useState<any[]>([])
   const [rutasDisponibles, setRutasDisponibles] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
@@ -23,7 +25,7 @@ export default function GanaderosPage() {
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
   const [editGanadero, setEditGanadero] = useState<any>(null)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [selectedFabricaId])
 
   // Modals Keyboard Event
   useEffect(() => {
@@ -45,10 +47,13 @@ export default function GanaderosPage() {
     setIsAdmin(profile?.rol === 'admin')
     setCurUser(userObj)
 
-    const [gRes, rRes] = await Promise.all([
-      supabase.from('ganaderos').select('*, rutas(nombre_ruta)').order('created_at', { ascending: false }),
-      supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
-    ])
+    const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').order('created_at', { ascending: false })
+    const rutaQ = supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
+    if (selectedFabricaId) {
+      ganaderoQ.eq('fabrica_id', selectedFabricaId)
+      rutaQ.eq('fabrica_id', selectedFabricaId)
+    }
+    const [gRes, rRes] = await Promise.all([ganaderoQ, rutaQ])
     
     if (gRes.data) setGanaderos(gRes.data)
     if (rRes.data) setRutasDisponibles(rRes.data)
@@ -97,7 +102,7 @@ export default function GanaderosPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
-    const payload = {
+    const payload: any = {
         codigo_ganadero: editGanadero.codigo_ganadero,
         nombre: editGanadero.nombre,
         ruta_id: editGanadero.ruta_id || null,
@@ -106,7 +111,8 @@ export default function GanaderosPage() {
         telefono: editGanadero.telefono,
         ubicacion: editGanadero.ubicacion,
         tipo_proveedor: editGanadero.tipo_proveedor,
-        activo: editGanadero.activo !== false
+        activo: editGanadero.activo !== false,
+        ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
     }
 
     if (editGanadero.id) {
@@ -126,7 +132,10 @@ export default function GanaderosPage() {
     <div className="space-y-6 fade-in pb-20 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Ganaderos</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Ganaderos</h1>
+            {selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>}
+          </div>
           <p className="text-slate-500 text-sm">Directorio de proveedores y rutas.</p>
         </div>
         {isAdmin && (

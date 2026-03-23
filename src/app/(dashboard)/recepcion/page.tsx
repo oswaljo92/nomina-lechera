@@ -5,10 +5,12 @@ import { Plus, Trash2, Save, Search, Loader2, List, FileSpreadsheet, CheckCircle
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { logAction } from '@/lib/log-utils'
+import { useFabrica } from '@/contexts/FabricaContext'
 
 export default function RecepcionPage() {
   const supabase = createClient()
   const router = useRouter()
+  const { selectedFabricaId, selectedFabrica } = useFabrica()
   
   const [tab, setTab] = useState('nuevo') // 'nuevo' | 'historial'
   const [isLoading, setIsLoading] = useState(true)
@@ -59,40 +61,53 @@ export default function RecepcionPage() {
       setIsAdmin(profile?.rol === 'admin')
       setCurUser(userObj)
 
+      const rutasQuery = supabase.from('rutas').select('*').eq('activo', true)
+      const ganaderoQuery = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true)
+
+      if (selectedFabricaId) {
+        rutasQuery.eq('fabrica_id', selectedFabricaId)
+        ganaderoQuery.eq('fabrica_id', selectedFabricaId)
+      }
+
       const [resRutas, resGanaderos, resCrios] = await Promise.all([
-        supabase.from('rutas').select('*').eq('activo', true),
-        supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true),
+        rutasQuery,
+        ganaderoQuery,
         supabase.from('tabla_crioscopia').select('*').order('punto_crioscopico', { ascending: false })
       ])
-      
+
       if (resRutas.data) setRutas(resRutas.data)
       if (resGanaderos.data) setGanaderos(resGanaderos.data)
       if (resCrios.data) setCrioscopia(resCrios.data)
-        
+
       setIsLoading(false)
     }
     loadData()
-  }, [])
+  }, [selectedFabricaId])
 
   useEffect(() => {
     if (tab === 'historial') {
       loadHistorial()
     }
-  }, [tab])
+  }, [tab, selectedFabricaId])
 
   const loadHistorial = async () => {
      setIsLoading(true)
-     const { data } = await supabase.from('recepciones_camion').select(`
-       *, 
+     const q = supabase.from('recepciones_camion').select(`
+       *,
        rutas (codigo_ruta, nombre_ruta),
        recepciones_detalle (
           id, litros_recepcion, grasa, proteina, acidez, temperatura, h_reductasa, ufc, crioscopia, porcentaje_agua_desc, litros_descuento, litros_a_pagar, ganadero_id,
           ganaderos (codigo_ganadero, nombre, ubicacion, tipo_proveedor)
        )
      `).order('fecha_ingreso', { ascending: false })
-     
+
+     if (selectedFabricaId) q.eq('fabrica_id', selectedFabricaId)
+
+     const { data } = await q
      if (data) setHistorialCamiones(data)
      setIsLoading(false)
+     // Reset semana selection so it auto-picks the most recent for this factory
+     setSelectedSemanaHistorial('')
   }
 
   const handleCamionRutaChange = (val: string) => {
@@ -249,7 +264,8 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: new Date(camion.fecha).toISOString()
+         fecha_ingreso: new Date(camion.fecha).toISOString(),
+         ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
        }).eq('id', camion.id)
 
        if (recError) {
@@ -265,7 +281,8 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: new Date(camion.fecha).toISOString()
+         fecha_ingreso: new Date(camion.fecha).toISOString(),
+         ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
        }).select().single()
 
        if (recError) {
@@ -554,8 +571,13 @@ export default function RecepcionPage() {
             )}
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200">
+              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-base font-bold text-slate-800">A. Datos del Camión</h2>
+                {selectedFabrica && (
+                  <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">
+                    {selectedFabrica.codigo} · {selectedFabrica.nombre}
+                  </span>
+                )}
               </div>
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                 <div>

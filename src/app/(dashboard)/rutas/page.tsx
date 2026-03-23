@@ -4,9 +4,11 @@ import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Edit2, Trash2, Loader2, X, Search, AlertCircle, History, RefreshCcw } from 'lucide-react'
 import { logAction } from '@/lib/log-utils'
+import { useFabrica } from '@/contexts/FabricaContext'
 
 export default function RutasPage() {
   const supabase = createClient()
+  const { selectedFabricaId, selectedFabrica } = useFabrica()
   const [rutas, setRutas] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -22,7 +24,7 @@ export default function RutasPage() {
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
   const [editRuta, setEditRuta] = useState<any>(null)
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [selectedFabricaId])
 
   // Modals Keyboard Event
   useEffect(() => {
@@ -44,7 +46,9 @@ export default function RutasPage() {
     setIsAdmin(profile?.rol === 'admin')
     setCurUser(userObj)
 
-    const { data: rutasData } = await supabase.from('rutas').select('*').order('created_at', { ascending: false })
+    const rutaQ = supabase.from('rutas').select('*').order('created_at', { ascending: false })
+    if (selectedFabricaId) rutaQ.eq('fabrica_id', selectedFabricaId)
+    const { data: rutasData } = await rutaQ
     if (rutasData) setRutas(rutasData)
     setLoading(false)
   }
@@ -86,21 +90,18 @@ export default function RutasPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
+    const rutaPayload: any = {
+      codigo_ruta: editRuta.codigo_ruta,
+      nombre_ruta: editRuta.nombre_ruta,
+      sap: editRuta.sap,
+      activo: editRuta.activo !== false,
+      ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
+    }
     if (editRuta.id) {
-       await supabase.from('rutas').update({ 
-         codigo_ruta: editRuta.codigo_ruta, 
-         nombre_ruta: editRuta.nombre_ruta, 
-         sap: editRuta.sap,
-         activo: editRuta.activo !== false
-       }).eq('id', editRuta.id)
+       await supabase.from('rutas').update(rutaPayload).eq('id', editRuta.id)
        logAction(supabase, curUser, 'Rutas', 'EDITAR', `Editada ruta: ${editRuta.nombre_ruta}`)
     } else {
-       await supabase.from('rutas').insert({ 
-         codigo_ruta: editRuta.codigo_ruta, 
-         nombre_ruta: editRuta.nombre_ruta, 
-         sap: editRuta.sap,
-         activo: editRuta.activo !== false
-       })
+       await supabase.from('rutas').insert(rutaPayload)
        logAction(supabase, curUser, 'Rutas', 'CREAR', `Creada ruta: ${editRuta.nombre_ruta}`)
     }
     setIsModalOpen(false)
@@ -113,7 +114,10 @@ export default function RutasPage() {
     <div className="space-y-6 fade-in pb-20 px-4 sm:px-0">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Rutas</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Rutas</h1>
+            {selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>}
+          </div>
           <p className="text-slate-500 text-sm">Gestión de rutas de recolección.</p>
         </div>
         {isAdmin && (

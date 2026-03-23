@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Loader2, TrendingUp, Filter } from 'lucide-react'
+import { useFabrica } from '@/contexts/FabricaContext'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend, LineChart, Line, BarChart, Bar, ComposedChart
@@ -12,10 +13,13 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 export default function DashboardPage() {
   const supabase = createClient()
+  const { fabricas, selectedFabricaId, selectedFabrica } = useFabrica()
   const [isLoading, setIsLoading] = useState(true)
   const [recepciones, setRecepciones] = useState<any[]>([])
+  const [camiones, setCamiones] = useState<any[]>([])
   const [tasas, setTasas] = useState<any[]>([])
-  const [filtroProveedor, setFiltroProveedor] = useState('Todos') // Todos, PROPIO, TERCERO
+  const [filtroProveedor, setFiltroProveedor] = useState('Todos')
+  const [filtroFabrica, setFiltroFabrica] = useState('todas')
   
   // Quality line visibility toggles
   const [showQuality, setShowQuality] = useState({
@@ -29,25 +33,28 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
-      // Traemos detalle con ganaderos y camión
-      const { data: recs } = await supabase.from('recepciones_detalle').select(`
-        *,
-        recepciones_camion ( fecha_ingreso ),
-        ganaderos ( tipo_proveedor )
-      `)
-      const { data: tas } = await supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true })
-
-      if (recs) setRecepciones(recs)
-      if (tas) setTasas(tas)
+      const [recsRes, camionesRes, tasRes] = await Promise.all([
+        supabase.from('recepciones_detalle').select(`
+          *,
+          recepciones_camion ( fecha_ingreso, fabrica_id ),
+          ganaderos ( tipo_proveedor )
+        `),
+        supabase.from('recepciones_camion').select('id, litros_romana, fabrica_id, fecha_ingreso'),
+        supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true })
+      ])
+      if (recsRes.data) setRecepciones(recsRes.data)
+      if (camionesRes.data) setCamiones(camionesRes.data)
+      if (tasRes.data) setTasas(tasRes.data)
       setIsLoading(false)
     }
     fetchData()
   }, [])
 
-  // 1. Filtrar por Proveedor
+  // 1. Filtrar por Fábrica y Proveedor
   const recFiltered = recepciones.filter(r => {
-    if (filtroProveedor === 'Todos') return true
-    return r.ganaderos?.tipo_proveedor === filtroProveedor
+    if (filtroFabrica !== 'todas' && r.recepciones_camion?.fabrica_id !== filtroFabrica) return false
+    if (filtroProveedor !== 'Todos' && r.ganaderos?.tipo_proveedor !== filtroProveedor) return false
+    return true
   })
 
   // 2. KPIs
@@ -66,16 +73,16 @@ export default function DashboardPage() {
      return { name: dia, Litros: sum }
   })
 
-  // 4. Tortas 
-  const propiosLts = recepciones.filter(r => r.ganaderos?.tipo_proveedor === 'PROPIO').reduce((a,c) => a + c.litros_recepcion, 0) || 12000
-  const tercerosLts = recepciones.filter(r => r.ganaderos?.tipo_proveedor === 'TERCERO').reduce((a,c) => a + c.litros_recepcion, 0) || 35000
-  const pie1Data = [{ name: 'Propios', value: propiosLts }, { name: 'Terceros', value: tercerosLts }]
+  // 4. Tortas
+  const propiosLts = recFiltered.filter(r => r.ganaderos?.tipo_proveedor === 'PROPIO').reduce((a,c) => a + Number(c.litros_recepcion||0), 0)
+  const tercerosLts = recFiltered.filter(r => r.ganaderos?.tipo_proveedor === 'TERCERO').reduce((a,c) => a + Number(c.litros_recepcion||0), 0)
+  const pie1Data = [{ name: 'Propios', value: propiosLts || 0 }, { name: 'Terceros', value: tercerosLts || 0 }]
 
-  const pie2Data = [
-    { name: 'Fab. Vigia', value: 45 },
-    { name: 'Fab. Barinas', value: 30 },
-    { name: 'Fab. Quenaca', value: 25 },
-  ]
+  // Pie por fábrica — litros romana reales desde recepciones_camion
+  const pie2Data = fabricas.map(f => ({
+    name: `${f.codigo} · ${f.nombre}`,
+    value: camiones.filter(c => c.fabrica_id === f.id).reduce((a,c) => a + Number(c.litros_romana||0), 0)
+  })).filter(d => d.value > 0)
 
   // 5. Gráfico de Calidad Interactivo
   const calidadData = diasSemana.map((dia, index) => {
@@ -142,14 +149,17 @@ export default function DashboardPage() {
           </h1>
           <p className="text-slate-500 mt-1 text-sm sm:text-base">Análisis de rendimiento, litros y parámetros de calidad</p>
         </div>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg w-full sm:w-auto">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
             <Filter size={16} className="text-slate-400 ml-2 shrink-0" />
-            <select 
-              value={filtroProveedor} 
-              onChange={e => setFiltroProveedor(e.target.value)}
-              className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer grow"
-            >
+            <select value={filtroFabrica} onChange={e => setFiltroFabrica(e.target.value)} className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer">
+              <option value="todas">Todas las Fábricas</option>
+              {fabricas.map(f => <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
+            <Filter size={16} className="text-slate-400 ml-2 shrink-0" />
+            <select value={filtroProveedor} onChange={e => setFiltroProveedor(e.target.value)} className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer">
               <option value="Todos">Todos los Proveedores</option>
               <option value="PROPIO">Solo Propios</option>
               <option value="TERCERO">Solo Terceros</option>

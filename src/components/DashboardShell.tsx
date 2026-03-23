@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react'
 import Sidebar from '@/components/Sidebar'
 import { Menu, X, Settings2, Loader2, CheckCircle2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { FabricaProvider } from '@/contexts/FabricaContext'
 
 interface DashboardShellProps {
   children: React.ReactNode
@@ -76,6 +77,7 @@ export default function DashboardShell({ children, userRole, userEmail, userName
   }
 
   return (
+    <FabricaProvider>
     <div className="flex h-screen overflow-hidden bg-slate-50 relative">
       {/* Overlay sidebar en móvil */}
       {isSidebarOpen && (
@@ -163,5 +165,6 @@ export default function DashboardShell({ children, userRole, userEmail, userName
         </div>
       )}
     </div>
+    </FabricaProvider>
   )
 }
