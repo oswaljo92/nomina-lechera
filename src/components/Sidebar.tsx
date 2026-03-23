@@ -94,8 +94,8 @@ export default function Sidebar({
             {userName.charAt(0)}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="truncate text-sm font-bold text-slate-50">{userName}</span>
-            <span className="truncate text-[10px] text-slate-400 leading-tight">{userEmail}</span>
+            <span className="text-sm font-bold text-slate-50 leading-tight break-words">{userName}</span>
+            <span className="truncate text-[10px] text-slate-400 leading-tight mt-0.5">{userEmail}</span>
             <span className="text-[10px] text-blue-400 font-medium uppercase tracking-wider mt-0.5">{userRole}</span>
           </div>
         </div>
