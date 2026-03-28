@@ -1309,6 +1309,10 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
 
       const { error } = await supabase.from('precios_semanales').upsert(payload, { onConflict: 'fecha_semana,grupo' })
       if (error) { errores.push(`Fila ${fila}: Error — ${error.message}`); continue }
+      // Sincronizar grupo en la tabla de ganaderos (igual que en crear/editar)
+      if (ganaderosCodes.length > 0) {
+        await supabase.from('ganaderos').update({ grupo }).in('codigo_ganadero', ganaderosCodes)
+      }
       ok++
     }
 

@@ -169,14 +169,14 @@ export default function DashboardPage() {
       const tasaForDay = tasas.find(t => t.fecha === dayDate)?.tasa ?? (tasas.length > 0 ? tasas[tasas.length - 1].tasa : 40)
 
       // Promedio ponderado del precio en USD
-      let precioUSD = 0.40 // fallback
+      let precioUSD = 0 // sin precio configurado = $0
       if (dayRecs.length > 0 && preciosSemana.length > 0) {
         let sumPonderado = 0
         let sumLitros = 0
         for (const r of dayRecs) {
           const grupo = r.ganaderos?.grupo
           const ps = preciosSemana.find(p => p.grupo === grupo)
-          const precio = ps ? Number(ps.precio_leche_usd) : 0.40
+          const precio = ps ? Number(ps.precio_leche_usd) : 0
           const litros = Number(r.litros_recepcion || 0)
           sumPonderado += precio * litros
           sumLitros += litros
