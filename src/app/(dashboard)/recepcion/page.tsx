@@ -55,6 +55,14 @@ export default function RecepcionPage() {
 
   const [detalles, setDetalles] = useState<any[]>([])
 
+  // Cuando estamos en "Todas las fábricas", el usuario debe escoger a cuál fábrica
+  // se asignará la carga antes de guardar.
+  const [fabricaParaCarga, setFabricaParaCarga] = useState<string>('')
+  const { fabricas } = useFabrica()
+
+  // ID efectivo para guardar: si es "all" usa fabricaParaCarga, si no usa selectedFabricaId
+  const fabricaIdParaGuardar = isAllFabricas ? fabricaParaCarga : selectedFabricaId
+
   useEffect(() => {
     async function loadData() {
       const { data: userData } = await supabase.auth.getUser()
@@ -63,6 +71,7 @@ export default function RecepcionPage() {
       setIsAdmin(profile?.rol === 'admin')
       setCurUser(userObj)
 
+      // En modo "Todas", cargamos todos los catálogos; se filtrarán al elegir fábrica
       const rutasQuery = supabase.from('rutas').select('*').eq('activo', true)
       const ganaderoQuery = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true)
 
@@ -85,6 +94,23 @@ export default function RecepcionPage() {
     }
     loadData()
   }, [selectedFabricaId])
+
+  // Cuando cambia la fábrica seleccionada para carga (modo Todas), recargar catálogos filtrados
+  useEffect(() => {
+    if (!isAllFabricas || !fabricaParaCarga) return
+    async function reloadCatalogos() {
+      const [resRutas, resGanaderos] = await Promise.all([
+        supabase.from('rutas').select('*').eq('activo', true).eq('fabrica_id', fabricaParaCarga),
+        supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true).eq('fabrica_id', fabricaParaCarga)
+      ])
+      if (resRutas.data) setRutas(resRutas.data)
+      if (resGanaderos.data) setGanaderos(resGanaderos.data)
+      // Limpiar selección de ruta/ganaderos al cambiar fábrica
+      setCamion(c => ({ ...c, codigo_ruta: '', ruta_id: '', nombre_ruta: '' }))
+      setDetalles([])
+    }
+    reloadCatalogos()
+  }, [fabricaParaCarga, isAllFabricas])
 
   useEffect(() => {
     if (tab === 'historial') {
@@ -253,6 +279,7 @@ export default function RecepcionPage() {
   }
 
   const handleSave = async () => {
+    if (isAllFabricas && !fabricaParaCarga) return alert('Debes seleccionar a qué fábrica se asignará esta carga.')
     if (!camion.ruta_id) return alert('Debes seleccionar una ruta válida para el camión.')
     if (detalles.length === 0) return alert('Debes agregar al menos un ganadero.')
     if (detalles.some(d => !d.ganadero_id)) return alert('Algunos ganaderos no son válidos (falta código).')
@@ -267,7 +294,7 @@ export default function RecepcionPage() {
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
          fecha_ingreso: new Date(camion.fecha).toISOString(),
-         ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
+         ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).eq('id', camion.id)
 
        if (recError) {
@@ -284,7 +311,7 @@ export default function RecepcionPage() {
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
          fecha_ingreso: new Date(camion.fecha).toISOString(),
-         ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
+         ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).select().single()
 
        if (recError) {
@@ -611,7 +638,7 @@ export default function RecepcionPage() {
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-base font-bold text-slate-800">A. Datos del Camión</h2>
                 {isAllFabricas
-                  ? <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">Todas las fábricas</span>
+                  ? <span className="bg-amber-100 text-amber-800 text-xs font-black px-3 py-1 rounded-full">Todas las fábricas</span>
                   : selectedFabrica && (
                     <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">
                       {selectedFabrica.codigo} · {selectedFabrica.nombre}
@@ -619,6 +646,35 @@ export default function RecepcionPage() {
                   )
                 }
               </div>
+
+              {/* ── Selector de fábrica (solo cuando estamos en "Todas") ── */}
+              {isAllFabricas && (
+                <div className="px-4 sm:px-6 pt-4 pb-2">
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                    <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-1">
+                      <AlertCircle size={12} /> Asignar carga a la fábrica:
+                    </p>
+                    <div className="flex flex-wrap gap-3">
+                      {fabricas.map(f => (
+                        <label key={f.id} className={`flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-pointer transition-all ${fabricaParaCarga === f.id ? 'border-blue-500 bg-blue-50' : 'border-slate-200 bg-white hover:border-blue-300'}`}>
+                          <input
+                            type="radio"
+                            name="fabrica_carga"
+                            value={f.id}
+                            checked={fabricaParaCarga === f.id}
+                            onChange={() => setFabricaParaCarga(f.id)}
+                            className="accent-blue-600"
+                          />
+                          <span className={`text-xs font-black ${fabricaParaCarga === f.id ? 'text-blue-700' : 'text-slate-600'}`}>
+                            {f.codigo} · {f.nombre}
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                 <div>
                   <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5">Ticket Romana</label>
