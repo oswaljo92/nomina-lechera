@@ -2,16 +2,11 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Edit2, Trash2, Loader2, X, Search, AlertCircle, History, Upload, Download, FileSpreadsheet, CheckCircle2 } from 'lucide-react'
+import { Plus, Edit2, Trash2, Loader2, X, Search, AlertCircle, History, Upload, Download, FileSpreadsheet, CheckCircle2, ArrowLeft } from 'lucide-react'
 import { logAction } from '@/lib/log-utils'
 import { useFabrica } from '@/contexts/FabricaContext'
 import * as XLSX from 'xlsx'
 
-// ─── Helper: solo números ──────────────────────────────────────────────────────
-const soloNumeros = (e: React.KeyboardEvent<HTMLInputElement>) => {
-  const allowed = ['Backspace', 'Delete', 'Tab', 'ArrowLeft', 'ArrowRight', 'Home', 'End']
-  if (!allowed.includes(e.key) && !/^[0-9]$/.test(e.key)) e.preventDefault()
-}
 
 export default function RutasPage() {
   const supabase = createClient()
@@ -40,6 +35,10 @@ export default function RutasPage() {
 
   // Error duplicado en formulario
   const [errorDuplicado, setErrorDuplicado] = useState('')
+
+  // Paginación
+  const [pageSize, setPageSize] = useState(10)
+  const [currentPage, setCurrentPage] = useState(0)
 
   useEffect(() => { load() }, [selectedFabricaId])
 
@@ -74,6 +73,11 @@ export default function RutasPage() {
            r.cedula?.toLowerCase().includes(term) ||
            r.rif?.toLowerCase().includes(term)
   })
+
+  const totalPages = Math.ceil(filteredRutas.length / pageSize)
+  const pagedRutas = filteredRutas.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
+
+  useEffect(() => { setCurrentPage(0) }, [searchTerm])
 
   const toggleSelection = (id: string) => {
     const next = new Set(selectedIds)
@@ -210,8 +214,8 @@ export default function RutasPage() {
         codigo_ruta: codigo,
         nombre_ruta: nombre,
         sap: String(row['SAP'] || '').trim() || null,
-        cedula: String(row['Cédula'] || '').replace(/\D/g, '') || null,
-        rif: String(row['RIF'] || '').replace(/\D/g, '') || null,
+        cedula: String(row['Cédula'] || '') || null,
+        rif: String(row['RIF'] || '') || null,
         activo: String(row['Activo (SI/NO)'] || 'SI').trim().toUpperCase() !== 'NO',
         ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
       }
@@ -286,9 +290,9 @@ export default function RutasPage() {
 
         {/* Mobile cards */}
         <div className="sm:hidden divide-y divide-slate-100">
-          {filteredRutas.length === 0 ? (
+          {pagedRutas.length === 0 ? (
             <div className="p-10 text-center text-slate-400 font-bold text-sm">Sin resultados</div>
-          ) : filteredRutas.map((ruta) => (
+          ) : pagedRutas.map((ruta) => (
             <div key={ruta.id} className="p-4 flex items-start gap-3">
               {isAdmin && <input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} className="mt-1 w-5 h-5 shrink-0 rounded" />}
               <div className="flex-1 min-w-0">
@@ -330,7 +334,7 @@ export default function RutasPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
-              {filteredRutas.map((ruta) => (
+              {pagedRutas.map((ruta) => (
                 <tr key={ruta.id} className="hover:bg-slate-50 transition-colors">
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} /></td>}
                   <td className="px-4 py-3 whitespace-nowrap flex gap-3">
@@ -355,6 +359,36 @@ export default function RutasPage() {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination */}
+        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <span>Mostrar:</span>
+            {[10,20,30,50].map(n => (
+              <button key={n} onClick={() => { setPageSize(n); setCurrentPage(0) }}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${pageSize === n ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                {n}
+              </button>
+            ))}
+            <span className="ml-2">de {filteredRutas.length} registros</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button disabled={currentPage === 0} onClick={() => setCurrentPage(p => Math.max(0, p-1))}
+              className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40">
+              ‹ Ant
+            </button>
+            {Array.from({length: totalPages}, (_,i) => i).filter(i => Math.abs(i - currentPage) <= 2).map(i => (
+              <button key={i} onClick={() => setCurrentPage(i)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${currentPage === i ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                {i + 1}
+              </button>
+            ))}
+            <button disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(p => Math.min(totalPages-1, p+1))}
+              className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40">
+              Sig ›
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Modal Crear / Editar ── */}
@@ -362,7 +396,12 @@ export default function RutasPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg my-auto overflow-hidden animate-in zoom-in-95">
             <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
-              <h3 className="font-black text-slate-800 text-sm">{editRuta.id ? 'Editar Ruta' : 'Nueva Ruta'}</h3>
+              <div className="flex items-center gap-2">
+                <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-blue-600 p-1 rounded-lg hover:bg-blue-50 transition-colors">
+                  <ArrowLeft size={18} />
+                </button>
+                <h3 className="font-black text-slate-800 text-sm">{editRuta.id ? 'Editar Ruta' : 'Nueva Ruta'}</h3>
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
             </div>
 
@@ -378,30 +417,56 @@ export default function RutasPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Código Ruta *</label>
-                  <input autoFocus required type="text" value={editRuta.codigo_ruta}
+                  <input autoFocus type="text" value={editRuta.codigo_ruta}
                     onChange={e => { setEditRuta({ ...editRuta, codigo_ruta: e.target.value }); setErrorDuplicado('') }}
                     placeholder="Ej: R01"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Nombre Ruta *</label>
-                  <input required type="text" value={editRuta.nombre_ruta} onChange={e => setEditRuta({ ...editRuta, nombre_ruta: e.target.value })}
+                  <input type="text" value={editRuta.nombre_ruta} onChange={e => setEditRuta({ ...editRuta, nombre_ruta: e.target.value })}
                     placeholder="Ej: Ruta Norte"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cédula (solo números)</label>
-                  <input type="text" value={editRuta.cedula || ''} onKeyDown={soloNumeros}
-                    onChange={e => setEditRuta({ ...editRuta, cedula: e.target.value.replace(/\D/g, '') })}
-                    placeholder="Ej: 12345678" inputMode="numeric"
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Cédula</label>
+                  <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                    <span className="bg-blue-600 text-white font-black text-sm px-3 py-2.5 shrink-0 animate-pulse select-none">V</span>
+                    <input
+                      type="text"
+                      value={(editRuta.cedula || '').replace(/^V/i, '')}
+                      onChange={e => setEditRuta({ ...editRuta, cedula: 'V' + e.target.value.replace(/^V/i, '') })}
+                      placeholder="20940780"
+                      className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
+                    />
+                  </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">RIF (solo números)</label>
-                  <input type="text" value={editRuta.rif || ''} onKeyDown={soloNumeros}
-                    onChange={e => setEditRuta({ ...editRuta, rif: e.target.value.replace(/\D/g, '') })}
-                    placeholder="Ej: 123456789" inputMode="numeric"
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">RIF</label>
+                  <div className="flex items-center border border-slate-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-blue-500">
+                    <select
+                      value={(editRuta.rif || 'J').charAt(0).toUpperCase()}
+                      onChange={e => {
+                        const nums = (editRuta.rif || '').replace(/^[VEPJCGRvepjcgr]/, '')
+                        setEditRuta({ ...editRuta, rif: e.target.value + nums })
+                      }}
+                      className="bg-blue-50 text-blue-700 font-black text-sm px-2 py-2.5 border-r border-slate-300 focus:outline-none cursor-pointer"
+                    >
+                      {['V','E','P','J','C','G','R'].map(l => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                    <input
+                      type="text"
+                      value={(editRuta.rif || '').replace(/^[VEPJCGRvepjcgr]/, '')}
+                      onChange={e => {
+                        const prefix = (editRuta.rif || 'J').charAt(0).toUpperCase()
+                        const valid = ['V','E','P','J','C','G','R']
+                        const pfx = valid.includes(prefix) ? prefix : 'J'
+                        setEditRuta({ ...editRuta, rif: pfx + e.target.value.replace(/^[VEPJCGRvepjcgr]/, '') })
+                      }}
+                      placeholder="000193681"
+                      className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">SAP</label>
@@ -528,23 +593,69 @@ export default function RutasPage() {
 function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: () => void, module: string }) {
   const supabase = createClient()
   const [logs, setLogs] = useState<any[]>([])
+  const [semanas, setSemanas] = useState<string[]>([])
+  const [selectedSemana, setSelectedSemana] = useState('')
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [bitacoraPage, setBitacoraPage] = useState(0)
+  const BITACORA_PAGE_SIZE = 20
 
   useEffect(() => { if (isOpen) fetchLogs() }, [isOpen])
 
   const fetchLogs = async () => {
     setLoading(true)
-    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(50)
-    if (data) setLogs(data)
+    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(500)
+    if (data) {
+      setLogs(data)
+      const weeks = new Set<string>()
+      data.forEach(l => {
+        if (l.created_at) {
+          const d = new Date(l.created_at)
+          const daysSinceWed = (d.getDay() - 3 + 7) % 7
+          const wed = new Date(d)
+          wed.setDate(d.getDate() - daysSinceWed)
+          const key = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+          weeks.add(key)
+        }
+      })
+      const sorted = Array.from(weeks).sort().reverse()
+      setSemanas(sorted)
+      const now = new Date()
+      const day = now.getDay()
+      const diff = (day < 3 ? 7 : 0) + day - 3
+      const prevWed = new Date(now)
+      prevWed.setDate(now.getDate() - diff)
+      const wedStr = `${prevWed.getFullYear()}-${String(prevWed.getMonth()+1).padStart(2,'0')}-${String(prevWed.getDate()).padStart(2,'0')}`
+      setSelectedSemana(sorted.includes(wedStr) ? wedStr : (sorted[0] || ''))
+    }
     setLoading(false)
   }
 
-  const filtered = logs.filter(l =>
-    l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
-    l.accion?.toLowerCase().includes(search.toLowerCase()) ||
-    l.detalles?.toLowerCase().includes(search.toLowerCase())
-  )
+  const formatSemana = (wedStr: string) => {
+    if (!wedStr) return 'Todas'
+    const [y,m,d] = wedStr.split('-')
+    const wed = new Date(parseInt(y), parseInt(m)-1, parseInt(d))
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    const fmt = (dt: Date) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+
+  const filtered = logs.filter(l => {
+    if (selectedSemana) {
+      const d = new Date(l.created_at)
+      const daysSinceWed = (d.getDay() - 3 + 7) % 7
+      const wed = new Date(d); wed.setDate(d.getDate() - daysSinceWed)
+      const key = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+      if (key !== selectedSemana) return false
+    }
+    if (!search) return true
+    return l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
+      l.accion?.toLowerCase().includes(search.toLowerCase()) ||
+      l.detalles?.toLowerCase().includes(search.toLowerCase())
+  })
+
+  const totalBitacoraPages = Math.ceil(filtered.length / BITACORA_PAGE_SIZE)
+  const pagedLogs = filtered.slice(bitacoraPage * BITACORA_PAGE_SIZE, (bitacoraPage + 1) * BITACORA_PAGE_SIZE)
 
   if (!isOpen) return null
 
@@ -557,26 +668,46 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-red-500 p-1"><X size={24} /></button>
         </div>
-        <div className="p-4 flex-1 overflow-hidden flex flex-col">
-          <div className="relative mb-4">
-            <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-            <input type="text" placeholder="Filtrar..." value={search} onChange={e => setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 font-bold text-xs" />
-          </div>
-          <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-            {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div> : (
-              filtered.map(log => (
-                <div key={log.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col gap-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[8px] font-black text-slate-400 uppercase">{new Date(log.created_at).toLocaleString()}</span>
-                    <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-100 text-blue-700 uppercase">{log.accion}</span>
-                  </div>
-                  <p className="text-[11px] font-bold text-slate-800 leading-tight">{log.detalles}</p>
-                  <span className="text-[8px] font-medium text-slate-500 italic truncate">{log.usuario_email}</span>
-                </div>
-              ))
-            )}
+        <div className="p-4 flex gap-2 flex-wrap bg-slate-50 border-b border-slate-200 shrink-0">
+          <select value={selectedSemana} onChange={e => { setSelectedSemana(e.target.value); setBitacoraPage(0) }}
+            className="border border-slate-300 bg-white text-slate-700 font-bold rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500">
+            <option value="">Todas las semanas</option>
+            {semanas.map(s => <option key={s} value={s}>{formatSemana(s)}</option>)}
+          </select>
+          <div className="relative flex-1 min-w-[150px]">
+            <Search className="absolute left-3 top-2 text-slate-400" size={14} />
+            <input type="text" placeholder="Filtrar..." value={search} onChange={e => { setSearch(e.target.value); setBitacoraPage(0) }}
+              className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-slate-300 font-bold text-xs" />
           </div>
         </div>
+        <div className="p-4 flex-1 overflow-y-auto space-y-2">
+          {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div> : (
+            pagedLogs.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 font-bold text-sm">Sin registros</div>
+            ) : pagedLogs.map(log => (
+              <div key={log.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col gap-1">
+                <div className="flex justify-between items-center">
+                  <span className="text-[8px] font-black text-slate-400 uppercase">{new Date(log.created_at).toLocaleString('es-VE')}</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${log.accion === 'BORRAR' || log.accion === 'BORRADO_MASIVO' ? 'bg-red-100 text-red-700' : log.accion === 'CREAR' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{log.accion}</span>
+                </div>
+                <p className="text-[11px] font-bold text-slate-800 leading-tight">{log.detalles}</p>
+                <span className="text-[8px] font-medium text-slate-500 italic truncate">{log.usuario_email}</span>
+              </div>
+            ))
+          )}
+        </div>
+        {totalBitacoraPages > 1 && (
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            <span className="text-xs font-bold text-slate-500">{filtered.length} registros</span>
+            <div className="flex items-center gap-1">
+              <button disabled={bitacoraPage === 0} onClick={() => setBitacoraPage(p => p-1)}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 disabled:opacity-40">‹ Ant</button>
+              <span className="text-xs font-bold text-slate-600 px-2">{bitacoraPage + 1} / {totalBitacoraPages}</span>
+              <button disabled={bitacoraPage >= totalBitacoraPages - 1} onClick={() => setBitacoraPage(p => p+1)}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 disabled:opacity-40">Sig ›</button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

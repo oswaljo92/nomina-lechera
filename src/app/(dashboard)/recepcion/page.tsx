@@ -31,6 +31,8 @@ export default function RecepcionPage() {
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
   const [selectedSemanaHistorial, setSelectedSemanaHistorial] = useState<string>('')
+  const [historialPage, setHistorialPage] = useState(0)
+  const [historialPageSize, setHistorialPageSize] = useState(10)
 
   const [camion, setCamion] = useState<{
     id?: string,
@@ -393,6 +395,11 @@ export default function RecepcionPage() {
             nameStrings.includes(t)
   })
 
+  const historialTotalPages = Math.ceil(filteredCamiones.length / historialPageSize)
+  const pagedCamiones = filteredCamiones.slice(historialPage * historialPageSize, (historialPage + 1) * historialPageSize)
+
+  useEffect(() => { setHistorialPage(0) }, [selectedSemanaHistorial, filtroHistorial])
+
   const totalLitrosSemana = filteredCamiones.reduce((acc, hc) => acc + Number(hc.litros_romana || 0), 0)
   const totalLitrosPagarSemana = filteredCamiones.reduce((acc, hc) =>
     acc + (hc.recepciones_detalle?.reduce((s:number, d:any) => s + Number(d.litros_a_pagar || 0), 0) || 0), 0)
@@ -499,9 +506,9 @@ export default function RecepcionPage() {
               <>
                 {/* Vista Mobile - Tarjetas */}
                 <div className="sm:hidden divide-y divide-slate-100">
-                  {filteredCamiones.length === 0 ? (
+                  {pagedCamiones.length === 0 ? (
                     <div className="p-10 text-center text-slate-400 font-bold text-sm">Sin registros</div>
-                  ) : filteredCamiones.map(hc => (
+                  ) : pagedCamiones.map(hc => (
                     <div key={hc.id} className="p-4 flex items-start gap-3">
                       <input type="checkbox" checked={selectedHistorialIds.has(hc.id)} onChange={() => toggleSelection(hc.id)} className="mt-1 w-5 h-5 shrink-0 rounded" />
                       <div className="flex-1 min-w-0">
@@ -535,7 +542,7 @@ export default function RecepcionPage() {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
-                      {filteredCamiones.map(hc => (
+                      {pagedCamiones.map(hc => (
                          <tr key={hc.id} className="hover:bg-slate-50 transition-colors">
                             <td className="px-6 py-4 text-center"><input type="checkbox" checked={selectedHistorialIds.has(hc.id)} onChange={() => toggleSelection(hc.id)} /></td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm flex gap-2">
@@ -557,6 +564,36 @@ export default function RecepcionPage() {
                 </div>
               </>
             )}
+
+            {/* Pagination */}
+            <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                <span>Mostrar:</span>
+                {[10,20,30,50].map(n => (
+                  <button key={n} onClick={() => { setHistorialPageSize(n); setHistorialPage(0) }}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${historialPageSize === n ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                    {n}
+                  </button>
+                ))}
+                <span className="ml-2">de {filteredCamiones.length} registros</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <button disabled={historialPage === 0} onClick={() => setHistorialPage(p => Math.max(0, p-1))}
+                  className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40">
+                  ‹ Ant
+                </button>
+                {Array.from({length: historialTotalPages}, (_,i) => i).filter(i => Math.abs(i - historialPage) <= 2).map(i => (
+                  <button key={i} onClick={() => setHistorialPage(i)}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${historialPage === i ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                    {i + 1}
+                  </button>
+                ))}
+                <button disabled={historialPage >= historialTotalPages - 1} onClick={() => setHistorialPage(p => Math.min(historialTotalPages-1, p+1))}
+                  className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40">
+                  Sig ›
+                </button>
+              </div>
+            </div>
          </div>
       )}
 

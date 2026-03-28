@@ -1076,10 +1076,11 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
 function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => void }) {
   const supabase = createClient()
   const tableRef = useRef<HTMLDivElement>(null)
+  const importRef = useRef<HTMLInputElement>(null)
   const [semanas, setSemanas] = useState<any[]>([])
   const [selectedSemana, setSelectedSemana] = useState('')
   const [tasaBase, setTasaBase] = useState(0)
-  
+
   const [precios, setPrecios] = useState<any[]>([])
   const [ganaderosList, setGanaderosList] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -1087,6 +1088,12 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
   const [dbError, setDbError] = useState('')
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [busqueda, setBusqueda] = useState('')
+
+  // Import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [importRows, setImportRows] = useState<any[]>([])
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; errores: string[] } | null>(null)
 
   useEffect(() => {
      async function pop() {
@@ -1230,9 +1237,93 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
     }
   }
 
+  const handleDescargarPlantillaPrecios = () => {
+    const ejemplo = [{
+      'Grupo': 'G001',
+      'Ganaderos (códigos separados por coma)': 'G001,G002,G003',
+      'Precio Leche USD': 0.35,
+      'Precio Flete USD': 0.05
+    }]
+    const ws = XLSX.utils.json_to_sheet(ejemplo)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+    XLSX.writeFile(wb, 'plantilla_precios.xlsx')
+  }
+
+  const handleArchivoImportPrecios = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[]
+      setImportRows(rows)
+      setImportResult(null)
+      setIsImportModalOpen(true)
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
+  }
+
+  const handleConfirmarImportPrecios = async () => {
+    if (!selectedSemana) { alert('Selecciona una semana antes de importar.'); return }
+    setImportLoading(true)
+    const errores: string[] = []
+    let ok = 0
+
+    for (let i = 0; i < importRows.length; i++) {
+      const row = importRows[i]
+      const fila = i + 2
+      const grupo = String(row['Grupo'] || '').trim()
+      const ganaderosCsv = String(row['Ganaderos (códigos separados por coma)'] || '').trim()
+      const precioLeche = parseFloat(String(row['Precio Leche USD'] || '0')) || 0
+      const precioFlete = parseFloat(String(row['Precio Flete USD'] || '0')) || 0
+
+      if (!grupo) { errores.push(`Fila ${fila}: Falta el Grupo.`); continue }
+      if (!ganaderosCsv) { errores.push(`Fila ${fila}: Falta la lista de Ganaderos.`); continue }
+
+      const ganaderosCodes = ganaderosCsv.split(',').map((c: string) => c.trim()).filter(Boolean)
+      const total_pagar_usd = precioLeche + precioFlete
+      const total_pagar_bs = total_pagar_usd * tasaBase
+
+      // Derive rutas from ganaderos
+      const rutasSet = new Set<string>()
+      ganaderosCodes.forEach((cod: string) => {
+        const g = ganaderosList.find((gl: any) => gl.codigo_ganadero === cod)
+        const rutaCod = g?.rutas?.codigo_ruta || g?.rutas?.[0]?.codigo_ruta
+        if (rutaCod) rutasSet.add(rutaCod)
+      })
+
+      const payload = {
+        fecha_semana: selectedSemana,
+        grupo,
+        ganaderos: ganaderosCodes,
+        rutas: Array.from(rutasSet),
+        precio_leche_usd: precioLeche,
+        precio_flete_usd: precioFlete,
+        total_pagar_usd,
+        total_pagar_bs
+      }
+
+      const { error } = await supabase.from('precios_semanales').upsert(payload, { onConflict: 'fecha_semana,grupo' })
+      if (error) { errores.push(`Fila ${fila}: Error — ${error.message}`); continue }
+      ok++
+    }
+
+    logAction(supabase, user, 'Precios', 'IMPORTAR_MASIVO', `Importados ${ok} grupos de precios para la semana ${formatDate(selectedSemana)}. Errores: ${errores.length}`)
+    setImportResult({ ok, errores })
+    setImportLoading(false)
+    if (ok > 0) {
+      const { data } = await supabase.from('precios_semanales').select('*').eq('fecha_semana', selectedSemana).order('created_at')
+      if (data) setPrecios(data)
+    }
+  }
+
   return (
     <div className="space-y-6">
-       
+
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Semana de Apertura</label>
@@ -1273,7 +1364,7 @@ CREATE TABLE precios_semanales (
 
        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
           <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
-             <div className="flex gap-2 items-center">
+             <div className="flex gap-2 items-center flex-wrap">
                <h3 className="font-bold text-slate-800 hidden md:block">Precios por Grupo</h3>
                <button onClick={exportAsImage} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
                  <ImageIcon size={14}/> Exportar Foto
@@ -1281,6 +1372,13 @@ CREATE TABLE precios_semanales (
                <button onClick={exportAsExcel} className="flex items-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
                  <Download size={14}/> Exportar Excel
                </button>
+               <button onClick={handleDescargarPlantillaPrecios} className="flex items-center gap-2 bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                 <FileSpreadsheet size={14}/> Plantilla
+               </button>
+               <button onClick={() => importRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                 <Upload size={14}/> Importar Excel
+               </button>
+               <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImportPrecios} />
              </div>
              
              <div className="flex gap-2 items-center w-full md:w-auto overflow-x-auto">
@@ -1372,6 +1470,84 @@ CREATE TABLE precios_semanales (
              </div>
           )}
        </div>
+
+       {/* ── Modal Importar Precios ── */}
+       {isImportModalOpen && (
+         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden animate-in zoom-in-95">
+             <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
+               <h3 className="font-black text-slate-800 text-sm flex items-center gap-2">
+                 <Upload size={16} className="text-blue-600" /> Importar Precios desde Excel
+               </h3>
+               <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+             </div>
+             <div className="p-4 sm:p-6">
+               {importResult ? (
+                 <div className="space-y-4">
+                   <div className="flex gap-4">
+                     <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                       <CheckCircle2 className="text-emerald-500 mx-auto mb-2" size={32} />
+                       <p className="text-2xl font-black text-emerald-700">{importResult.ok}</p>
+                       <p className="text-xs font-bold text-emerald-600">Grupos importados</p>
+                     </div>
+                     {importResult.errores.length > 0 && (
+                       <div className="flex-1 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                         <X className="text-red-500 mx-auto mb-2" size={32} />
+                         <p className="text-2xl font-black text-red-700">{importResult.errores.length}</p>
+                         <p className="text-xs font-bold text-red-600">Filas con error</p>
+                       </div>
+                     )}
+                   </div>
+                   {importResult.errores.length > 0 && (
+                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-1">
+                       {importResult.errores.map((e, i) => <p key={i} className="text-xs text-red-700 font-semibold">• {e}</p>)}
+                     </div>
+                   )}
+                   <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }}
+                     className="w-full bg-blue-600 text-white font-black py-3 rounded-xl">Cerrar</button>
+                 </div>
+               ) : (
+                 <div className="space-y-4">
+                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                     <p className="text-xs font-bold text-blue-700">Se encontraron <span className="text-blue-900">{importRows.length} filas</span> en el archivo. Se usará la semana seleccionada: <strong>{formatDate(selectedSemana)}</strong></p>
+                   </div>
+                   <div className="overflow-x-auto max-h-64 border border-slate-200 rounded-xl">
+                     <table className="min-w-full text-xs">
+                       <thead className="bg-slate-50 sticky top-0">
+                         <tr>
+                           <th className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">#</th>
+                           {importRows.length > 0 && Object.keys(importRows[0]).map(col => (
+                             <th key={col} className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">{col}</th>
+                           ))}
+                         </tr>
+                       </thead>
+                       <tbody className="divide-y divide-slate-100">
+                         {importRows.map((row, i) => (
+                           <tr key={i} className="hover:bg-slate-50">
+                             <td className="px-3 py-2 font-bold text-slate-400">{i + 2}</td>
+                             {Object.keys(importRows[0]).map(col => (
+                               <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                                 {String(row[col] ?? '')}
+                               </td>
+                             ))}
+                           </tr>
+                         ))}
+                       </tbody>
+                     </table>
+                   </div>
+                   <div className="grid grid-cols-2 gap-3 pt-2">
+                     <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cancelar</button>
+                     <button onClick={handleConfirmarImportPrecios} disabled={importLoading}
+                       className="bg-blue-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60">
+                       {importLoading ? <><Loader2 size={16} className="animate-spin" /> Importando...</> : <><Upload size={16} /> Confirmar importación</>}
+                     </button>
+                   </div>
+                 </div>
+               )}
+             </div>
+           </div>
+         </div>
+       )}
     </div>
   )
 }

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { X, RefreshCcw, Loader2, History, Search } from 'lucide-react'
+import { X, RefreshCcw, Loader2, History, Search, ChevronLeft, ChevronRight } from 'lucide-react'
 
 interface BitacoraModalProps {
   isOpen: boolean
@@ -16,6 +16,10 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [semanas, setSemanas] = useState<string[]>([])
+  const [selectedSemana, setSelectedSemana] = useState('')
+  const [bitacoraPage, setBitacoraPage] = useState(0)
+  const BITACORA_PAGE_SIZE = 20
 
   useEffect(() => {
     if (isOpen) {
@@ -34,17 +38,61 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
       query = query.eq('modulo', moduleFilter)
     }
 
-    const { data } = await query.limit(100)
-    if (data) setLogs(data)
+    const { data } = await query.limit(500)
+    if (data) {
+      setLogs(data)
+      // Extract unique weeks (Wednesday start)
+      const weeks = new Set<string>()
+      data.forEach(l => {
+        if (l.created_at) {
+          const d = new Date(l.created_at)
+          const daysSinceWed = (d.getDay() - 3 + 7) % 7
+          const wed = new Date(d)
+          wed.setDate(d.getDate() - daysSinceWed)
+          const key = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+          weeks.add(key)
+        }
+      })
+      const sorted = Array.from(weeks).sort().reverse()
+      setSemanas(sorted)
+      // Auto-select current week
+      const now = new Date()
+      const day = now.getDay()
+      const diff = (day < 3 ? 7 : 0) + day - 3
+      const prevWed = new Date(now)
+      prevWed.setDate(now.getDate() - diff)
+      const wedStr = `${prevWed.getFullYear()}-${String(prevWed.getMonth()+1).padStart(2,'0')}-${String(prevWed.getDate()).padStart(2,'0')}`
+      setSelectedSemana(sorted.includes(wedStr) ? wedStr : (sorted[0] || ''))
+    }
     setLoading(false)
   }
 
-  const filteredLogs = logs.filter(l => 
-    l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
-    l.accion?.toLowerCase().includes(search.toLowerCase()) ||
-    l.detalles?.toLowerCase().includes(search.toLowerCase()) ||
-    (!moduleFilter && l.modulo?.toLowerCase().includes(search.toLowerCase()))
-  )
+  const formatSemana = (wedStr: string) => {
+    if (!wedStr) return 'Todas las semanas'
+    const [y,m,d] = wedStr.split('-')
+    const wed = new Date(parseInt(y), parseInt(m)-1, parseInt(d))
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    const fmt = (dt: Date) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+
+  const filteredLogs = logs.filter(l => {
+    if (selectedSemana) {
+      const d = new Date(l.created_at)
+      const daysSinceWed = (d.getDay() - 3 + 7) % 7
+      const wed = new Date(d); wed.setDate(d.getDate() - daysSinceWed)
+      const key = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+      if (key !== selectedSemana) return false
+    }
+    if (!search) return true
+    return l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
+      l.accion?.toLowerCase().includes(search.toLowerCase()) ||
+      l.detalles?.toLowerCase().includes(search.toLowerCase()) ||
+      (!moduleFilter && l.modulo?.toLowerCase().includes(search.toLowerCase()))
+  })
+
+  const totalBitacoraPages = Math.ceil(filteredLogs.length / BITACORA_PAGE_SIZE)
+  const pagedLogs = filteredLogs.slice(bitacoraPage * BITACORA_PAGE_SIZE, (bitacoraPage + 1) * BITACORA_PAGE_SIZE)
 
   const formatDate = (iso: string) => {
     const d = new Date(iso)
@@ -66,18 +114,28 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
            </button>
         </div>
 
-        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row gap-4 items-center justify-between">
-           <div className="relative w-full md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
-              <input 
-                type="text" 
-                placeholder="Filtrar por usuario, acción..." 
-                value={search}
-                onChange={e=>setSearch(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500"
-              />
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row gap-3 items-center justify-between">
+           <div className="flex flex-col sm:flex-row gap-3 w-full md:flex-1">
+             <select
+               value={selectedSemana}
+               onChange={e => { setSelectedSemana(e.target.value); setBitacoraPage(0) }}
+               className="border border-slate-300 bg-white text-slate-700 font-bold rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+             >
+               <option value="">Todas las semanas</option>
+               {semanas.map(s => <option key={s} value={s}>{formatSemana(s)}</option>)}
+             </select>
+             <div className="relative flex-1">
+               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16}/>
+               <input
+                 type="text"
+                 placeholder="Filtrar por usuario, acción..."
+                 value={search}
+                 onChange={e => { setSearch(e.target.value); setBitacoraPage(0) }}
+                 className="w-full bg-white border border-slate-300 rounded-lg pl-9 pr-4 py-2 text-sm text-slate-800 font-semibold focus:ring-2 focus:ring-blue-500"
+               />
+             </div>
            </div>
-           <button onClick={fetchLogs} className="flex items-center gap-2 text-blue-600 font-bold text-sm hover:underline">
+           <button onClick={fetchLogs} className="flex items-center gap-2 text-blue-600 font-bold text-sm hover:underline shrink-0">
               <RefreshCcw size={16} className={loading ? 'animate-spin' : ''}/> Actualizar
            </button>
         </div>
@@ -87,7 +145,7 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
               <div className="flex justify-center p-20"><Loader2 className="animate-spin text-blue-500 w-10 h-10"/></div>
            ) : (
               <div className="space-y-3">
-                 {filteredLogs.map((log) => (
+                 {pagedLogs.map((log) => (
                     <div key={log.id} className="p-4 bg-slate-50 border border-slate-200 rounded-xl hover:shadow-md transition-shadow">
                        <div className="flex justify-between items-start mb-2">
                           <div className="flex items-center gap-3">
@@ -108,12 +166,35 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
                        <div className="text-[11px] font-semibold text-slate-500">Usuario: {log.usuario_email}</div>
                     </div>
                  ))}
-                 {filteredLogs.length === 0 && (
+                 {pagedLogs.length === 0 && (
                     <div className="text-center py-20 text-slate-400 font-bold italic">No se encontraron registros que coincidan con la búsqueda.</div>
                  )}
               </div>
            )}
         </div>
+
+        {totalBitacoraPages > 1 && (
+          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            <span className="text-xs font-bold text-slate-500">{filteredLogs.length} registros</span>
+            <div className="flex items-center gap-1">
+              <button disabled={bitacoraPage === 0} onClick={() => setBitacoraPage(p => p - 1)}
+                className="p-1.5 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40 flex items-center">
+                <ChevronLeft size={16} />
+              </button>
+              {Array.from({length: totalBitacoraPages}, (_,i) => i).filter(i => Math.abs(i - bitacoraPage) <= 2).map(i => (
+                <button key={i} onClick={() => setBitacoraPage(i)}
+                  className={`px-3 py-1 rounded-lg text-xs font-bold transition-colors ${bitacoraPage === i ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                  {i + 1}
+                </button>
+              ))}
+              <button disabled={bitacoraPage >= totalBitacoraPages - 1} onClick={() => setBitacoraPage(p => p + 1)}
+                className="p-1.5 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40 flex items-center">
+                <ChevronRight size={16} />
+              </button>
+            </div>
+            <span className="text-xs font-bold text-slate-500">{bitacoraPage + 1} / {totalBitacoraPages}</span>
+          </div>
+        )}
       </div>
     </div>
   )
