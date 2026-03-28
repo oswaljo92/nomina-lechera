@@ -171,7 +171,7 @@ export default function RecepcionPage() {
        ruta_id: hc.ruta_id,
        nombre_ruta: hc.rutas?.nombre_ruta || '',
        litros_romana: hc.litros_romana,
-       fecha: hc.fecha_ingreso.split('T')[0]
+       fecha: new Date(hc.fecha_ingreso).toISOString().split('T')[0]
      })
      
      const mappedDetalles = (hc.recepciones_detalle || []).map((d: any) => ({
@@ -293,7 +293,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: camion.fecha,
+         fecha_ingreso: camion.fecha + 'T12:00:00Z',
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).eq('id', camion.id)
 
@@ -310,7 +310,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: camion.fecha,
+         fecha_ingreso: camion.fecha + 'T12:00:00Z',
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).select().single()
 
@@ -433,10 +433,12 @@ export default function RecepcionPage() {
 
   const formatearFecha = (iso: string) => {
     if (!iso) return ''
-    // Tomar solo los primeros 10 caracteres (YYYY-MM-DD) y reordenar sin usar Date
-    // para evitar desfase por zona horaria UTC vs local
-    const [y, m, d] = iso.substring(0, 10).split('-')
-    return `${d}-${m}-${y}`
+    // Usar métodos UTC para evitar desfase por zona horaria del navegador
+    const d = new Date(iso)
+    const day   = String(d.getUTCDate()).padStart(2, '0')
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0')
+    const year  = d.getUTCFullYear()
+    return `${day}-${month}-${year}`
   }
 
   if (isLoading && tab === 'nuevo') return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500 w-12 h-12" /></div>
