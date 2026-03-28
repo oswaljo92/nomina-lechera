@@ -10,7 +10,7 @@ import { useFabrica } from '@/contexts/FabricaContext'
 export default function RecepcionPage() {
   const supabase = createClient()
   const router = useRouter()
-  const { selectedFabricaId, selectedFabrica } = useFabrica()
+  const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   
   const [tab, setTab] = useState('nuevo') // 'nuevo' | 'historial'
   const [isLoading, setIsLoading] = useState(true)
@@ -64,7 +64,7 @@ export default function RecepcionPage() {
       const rutasQuery = supabase.from('rutas').select('*').eq('activo', true)
       const ganaderoQuery = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true)
 
-      if (selectedFabricaId) {
+      if (selectedFabricaId && selectedFabricaId !== 'all') {
         rutasQuery.eq('fabrica_id', selectedFabricaId)
         ganaderoQuery.eq('fabrica_id', selectedFabricaId)
       }
@@ -101,7 +101,7 @@ export default function RecepcionPage() {
        )
      `).order('fecha_ingreso', { ascending: false })
 
-     if (selectedFabricaId) q.eq('fabrica_id', selectedFabricaId)
+     if (selectedFabricaId && selectedFabricaId !== 'all') q.eq('fabrica_id', selectedFabricaId)
 
      const { data } = await q
      if (data) setHistorialCamiones(data)
@@ -265,7 +265,7 @@ export default function RecepcionPage() {
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
          fecha_ingreso: new Date(camion.fecha).toISOString(),
-         ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
+         ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
        }).eq('id', camion.id)
 
        if (recError) {
@@ -282,7 +282,7 @@ export default function RecepcionPage() {
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
          fecha_ingreso: new Date(camion.fecha).toISOString(),
-         ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
+         ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
        }).select().single()
 
        if (recError) {
@@ -573,11 +573,14 @@ export default function RecepcionPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
                 <h2 className="text-base font-bold text-slate-800">A. Datos del Camión</h2>
-                {selectedFabrica && (
-                  <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">
-                    {selectedFabrica.codigo} · {selectedFabrica.nombre}
-                  </span>
-                )}
+                {isAllFabricas
+                  ? <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">Todas las fábricas</span>
+                  : selectedFabrica && (
+                    <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">
+                      {selectedFabrica.codigo} · {selectedFabrica.nombre}
+                    </span>
+                  )
+                }
               </div>
               <div className="p-4 sm:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6">
                 <div>

@@ -26,7 +26,7 @@ export default function Sidebar({
   const pathname = usePathname()
   const router = useRouter()
   const supabase = createClient()
-  const { fabricas, selectedFabrica, setSelectedFabricaId } = useFabrica()
+  const { fabricas, selectedFabrica, selectedFabricaId, setSelectedFabricaId } = useFabrica()
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -90,7 +90,7 @@ export default function Sidebar({
               <div className="flex items-center gap-2 min-w-0">
                 <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                 <span className="text-xs font-bold truncate text-gray-900">
-                  {selectedFabrica ? selectedFabrica.nombre : 'Seleccionar...'}
+                  {selectedFabricaId === 'all' ? 'Todas las fábricas' : (selectedFabrica ? selectedFabrica.nombre : 'Seleccionar...')}
                 </span>
               </div>
               <ChevronDown
@@ -102,8 +102,33 @@ export default function Sidebar({
             {/* Panel desplegable */}
             {dropdownOpen && (
               <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden" style={{ zIndex: 9999 }}>
+                {/* Opción: Todas las fábricas */}
+                <button
+                  type="button"
+                  onMouseDown={e => {
+                    e.preventDefault()
+                    setSelectedFabricaId('all')
+                    setDropdownOpen(false)
+                  }}
+                  className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 ${
+                    selectedFabricaId === 'all'
+                      ? 'bg-blue-50 hover:bg-blue-100'
+                      : 'bg-white hover:bg-gray-50'
+                  }`}
+                >
+                  <div className="min-w-0">
+                    <div className={`text-xs font-bold leading-tight ${selectedFabricaId === 'all' ? 'text-blue-700' : 'text-gray-900'}`}>
+                      Todas las fábricas
+                    </div>
+                    <div className="text-[10px] text-gray-400 mt-0.5">
+                      Sumatoria total
+                    </div>
+                  </div>
+                  {selectedFabricaId === 'all' && <Check className="h-4 w-4 text-blue-500 shrink-0" />}
+                </button>
+
                 {fabricas.map(f => {
-                  const isSelected = f.id === selectedFabrica?.id
+                  const isSelected = f.id === selectedFabricaId
                   return (
                     <button
                       key={f.id}

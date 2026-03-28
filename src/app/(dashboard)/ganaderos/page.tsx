@@ -8,7 +8,7 @@ import { useFabrica } from '@/contexts/FabricaContext'
 
 export default function GanaderosPage() {
   const supabase = createClient()
-  const { selectedFabricaId, selectedFabrica } = useFabrica()
+  const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [ganaderos, setGanaderos] = useState<any[]>([])
   const [rutasDisponibles, setRutasDisponibles] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
@@ -49,7 +49,7 @@ export default function GanaderosPage() {
 
     const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').order('created_at', { ascending: false })
     const rutaQ = supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
-    if (selectedFabricaId) {
+    if (selectedFabricaId && selectedFabricaId !== 'all') {
       ganaderoQ.eq('fabrica_id', selectedFabricaId)
       rutaQ.eq('fabrica_id', selectedFabricaId)
     }
@@ -134,7 +134,10 @@ export default function GanaderosPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Ganaderos</h1>
-            {selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>}
+            {isAllFabricas
+            ? <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">Todas las fábricas</span>
+            : selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>
+          }
           </div>
           <p className="text-slate-500 text-sm">Directorio de proveedores y rutas.</p>
         </div>

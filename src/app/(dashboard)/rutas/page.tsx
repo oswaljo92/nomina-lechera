@@ -8,7 +8,7 @@ import { useFabrica } from '@/contexts/FabricaContext'
 
 export default function RutasPage() {
   const supabase = createClient()
-  const { selectedFabricaId, selectedFabrica } = useFabrica()
+  const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [rutas, setRutas] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -47,7 +47,7 @@ export default function RutasPage() {
     setCurUser(userObj)
 
     const rutaQ = supabase.from('rutas').select('*').order('created_at', { ascending: false })
-    if (selectedFabricaId) rutaQ.eq('fabrica_id', selectedFabricaId)
+    if (selectedFabricaId && selectedFabricaId !== 'all') rutaQ.eq('fabrica_id', selectedFabricaId)
     const { data: rutasData } = await rutaQ
     if (rutasData) setRutas(rutasData)
     setLoading(false)
@@ -95,7 +95,7 @@ export default function RutasPage() {
       nombre_ruta: editRuta.nombre_ruta,
       sap: editRuta.sap,
       activo: editRuta.activo !== false,
-      ...(selectedFabricaId ? { fabrica_id: selectedFabricaId } : {})
+      ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
     }
     if (editRuta.id) {
        await supabase.from('rutas').update(rutaPayload).eq('id', editRuta.id)
@@ -116,7 +116,10 @@ export default function RutasPage() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">Rutas</h1>
-            {selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>}
+            {isAllFabricas
+              ? <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">Todas las fábricas</span>
+              : selectedFabrica && <span className="bg-blue-100 text-blue-800 text-xs font-black px-3 py-1 rounded-full">{selectedFabrica.codigo} · {selectedFabrica.nombre}</span>
+            }
           </div>
           <p className="text-slate-500 text-sm">Gestión de rutas de recolección.</p>
         </div>

@@ -10,11 +10,14 @@ export type Fabrica = {
   activo: boolean
 }
 
+export const ALL_FABRICAS_ID = 'all'
+
 type FabricaCtx = {
   fabricas: Fabrica[]
   selectedFabricaId: string
   setSelectedFabricaId: (id: string) => void
   selectedFabrica: Fabrica | null
+  isAllFabricas: boolean
   isLoading: boolean
 }
 
@@ -23,6 +26,7 @@ const FabricaContext = createContext<FabricaCtx>({
   selectedFabricaId: '',
   setSelectedFabricaId: () => {},
   selectedFabrica: null,
+  isAllFabricas: false,
   isLoading: true,
 })
 
@@ -43,8 +47,8 @@ export function FabricaProvider({ children }: { children: ReactNode }) {
       .then(({ data }) => {
         if (data && data.length > 0) {
           setFabricas(data)
-          const validSaved = saved && data.find((f: Fabrica) => f.id === saved)
-          const initial = validSaved ? saved : data[0].id
+          const validSaved = saved && (saved === ALL_FABRICAS_ID || data.find((f: Fabrica) => f.id === saved))
+          const initial = validSaved ? saved! : data[0].id
           setSelectedFabricaIdState(initial)
           if (!validSaved && typeof window !== 'undefined') {
             localStorage.setItem('_nl_fabrica', initial)
@@ -62,9 +66,10 @@ export function FabricaProvider({ children }: { children: ReactNode }) {
   }
 
   const selectedFabrica = fabricas.find(f => f.id === selectedFabricaId) || null
+  const isAllFabricas = selectedFabricaId === ALL_FABRICAS_ID
 
   return (
-    <FabricaContext.Provider value={{ fabricas, selectedFabricaId, setSelectedFabricaId, selectedFabrica, isLoading }}>
+    <FabricaContext.Provider value={{ fabricas, selectedFabricaId, setSelectedFabricaId, selectedFabrica, isAllFabricas, isLoading }}>
       {children}
     </FabricaContext.Provider>
   )

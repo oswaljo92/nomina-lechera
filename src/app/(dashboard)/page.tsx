@@ -13,13 +13,12 @@ const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6']
 
 export default function DashboardPage() {
   const supabase = createClient()
-  const { fabricas, selectedFabricaId, selectedFabrica } = useFabrica()
+  const { fabricas, selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [isLoading, setIsLoading] = useState(true)
   const [recepciones, setRecepciones] = useState<any[]>([])
   const [camiones, setCamiones] = useState<any[]>([])
   const [tasas, setTasas] = useState<any[]>([])
   const [filtroProveedor, setFiltroProveedor] = useState('Todos')
-  const [filtroFabrica, setFiltroFabrica] = useState('todas')
   
   // Quality line visibility toggles
   const [showQuality, setShowQuality] = useState({
@@ -52,7 +51,7 @@ export default function DashboardPage() {
 
   // 1. Filtrar por Fábrica y Proveedor
   const recFiltered = recepciones.filter(r => {
-    if (filtroFabrica !== 'todas' && r.recepciones_camion?.fabrica_id !== filtroFabrica) return false
+    if (!isAllFabricas && r.recepciones_camion?.fabrica_id !== selectedFabricaId) return false
     if (filtroProveedor !== 'Todos' && r.ganaderos?.tipo_proveedor !== filtroProveedor) return false
     return true
   })
@@ -79,9 +78,10 @@ export default function DashboardPage() {
   const pie1Data = [{ name: 'Propios', value: propiosLts || 0 }, { name: 'Terceros', value: tercerosLts || 0 }]
 
   // Pie por fábrica — litros romana reales desde recepciones_camion
+  const camionesFiltrados = isAllFabricas ? camiones : camiones.filter(c => c.fabrica_id === selectedFabricaId)
   const pie2Data = fabricas.map(f => ({
     name: `${f.codigo} · ${f.nombre}`,
-    value: camiones.filter(c => c.fabrica_id === f.id).reduce((a,c) => a + Number(c.litros_romana||0), 0)
+    value: camionesFiltrados.filter(c => c.fabrica_id === f.id).reduce((a,c) => a + Number(c.litros_romana||0), 0)
   })).filter(d => d.value > 0)
 
   // 5. Gráfico de Calidad Interactivo
@@ -150,12 +150,10 @@ export default function DashboardPage() {
           <p className="text-slate-500 mt-1 text-sm sm:text-base">Análisis de rendimiento, litros y parámetros de calidad</p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
-            <Filter size={16} className="text-slate-400 ml-2 shrink-0" />
-            <select value={filtroFabrica} onChange={e => setFiltroFabrica(e.target.value)} className="bg-transparent border-none text-slate-700 text-sm focus:ring-0 font-medium cursor-pointer">
-              <option value="todas">Todas las Fábricas</option>
-              {fabricas.map(f => <option key={f.id} value={f.id}>{f.codigo} · {f.nombre}</option>)}
-            </select>
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-2 rounded-lg">
+            <span className="text-xs font-black text-blue-700">
+              {isAllFabricas ? 'Todas las fábricas' : (selectedFabrica ? `${selectedFabrica.codigo} · ${selectedFabrica.nombre}` : '')}
+            </span>
           </div>
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
             <Filter size={16} className="text-slate-400 ml-2 shrink-0" />
