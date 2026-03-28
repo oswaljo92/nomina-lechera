@@ -433,8 +433,10 @@ export default function RecepcionPage() {
 
   const formatearFecha = (iso: string) => {
     if (!iso) return ''
-    const d = new Date(iso)
-    return `${d.getDate().toString().padStart(2, '0')}-${(d.getMonth()+1).toString().padStart(2, '0')}-${d.getFullYear()}`
+    // Tomar solo los primeros 10 caracteres (YYYY-MM-DD) y reordenar sin usar Date
+    // para evitar desfase por zona horaria UTC vs local
+    const [y, m, d] = iso.substring(0, 10).split('-')
+    return `${d}-${m}-${y}`
   }
 
   if (isLoading && tab === 'nuevo') return <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500 w-12 h-12" /></div>
