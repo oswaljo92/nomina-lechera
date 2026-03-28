@@ -19,7 +19,9 @@ export default function DashboardPage() {
   const [camiones, setCamiones] = useState<any[]>([])
   const [tasas, setTasas] = useState<any[]>([])
   const [filtroProveedor, setFiltroProveedor] = useState('Todos')
-  
+  const [preciosSemanales, setPreciosSemanales] = useState<any[]>([])
+  const [selectedSemanaChart, setSelectedSemanaChart] = useState('')
+
   // Quality line visibility toggles
   const [showQuality, setShowQuality] = useState({
      Grasa: true, Proteina: true, Temperatura: true, Crioscopia: false
@@ -32,18 +34,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function fetchData() {
-      const [recsRes, camionesRes, tasRes] = await Promise.all([
+      const [recsRes, camionesRes, tasRes, precsRes] = await Promise.all([
         supabase.from('recepciones_detalle').select(`
           *,
           recepciones_camion ( fecha_ingreso, fabrica_id ),
-          ganaderos ( tipo_proveedor )
+          ganaderos ( tipo_proveedor, grupo )
         `),
         supabase.from('recepciones_camion').select('id, litros_romana, fabrica_id, fecha_ingreso'),
-        supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true })
+        supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true }),
+        supabase.from('precios_semanales').select('fecha_semana, grupo, precio_leche_usd')
       ])
       if (recsRes.data) setRecepciones(recsRes.data)
       if (camionesRes.data) setCamiones(camionesRes.data)
       if (tasRes.data) setTasas(tasRes.data)
+      if (precsRes.data) setPreciosSemanales(precsRes.data)
       setIsLoading(false)
     }
     fetchData()
@@ -113,19 +117,83 @@ export default function DashboardPage() {
     Tasa: Number(t.tasa)
   }))
 
-  // 7. Volumen vs Precios (Composed)
-  const volPrecData = diasSemana.map((dia, index) => {
-     const natIndex = mapDiasNat[index]
-     // Hallar un precio referencial de tasa, usando la última tasa disponible o un fallo seguro
-     const lastTasa = preciosData.length > 0 ? preciosData[preciosData.length - 1].Tasa : 40
-     const sum = recFiltered.filter(r => new Date(r.recepciones_camion?.fecha_ingreso).getDay() === natIndex).reduce((a,c) => a + Number(c.litros_recepcion||0), 0)
-     
-     // Precio histórico quemado temporalmente para propósitos visuales 0.40c dólar.
-     const precioUSD = 0.40
-     const precioBs = lastTasa * precioUSD 
-     
-     return { name: dia, Litros: sum, PrecioBs: precioBs.toFixed(2), PrecioUSD: precioUSD.toFixed(2) }
-  })
+  // Semanas disponibles (miércoles registrados en tasas_bcv, desc)
+  const semanasDisponibles = React.useMemo(() => {
+    const fromTasas = tasas
+      .filter(t => ['miercoles','Miércoles','miércoles','Miercoles'].includes(t.dia))
+      .map(t => t.fecha)
+    const fromPrecios = preciosSemanales.map(p => p.fecha_semana)
+    return [...new Set([...fromTasas, ...fromPrecios])].sort((a, b) => b.localeCompare(a))
+  }, [tasas, preciosSemanales])
+
+  // Auto-inicializar selectedSemanaChart a la semana actual
+  useEffect(() => {
+    if (semanasDisponibles.length > 0 && !selectedSemanaChart) {
+      const now = new Date()
+      const day = now.getDay()
+      const diff = (day < 3 ? 7 : 0) + day - 3
+      const wed = new Date(now)
+      wed.setDate(now.getDate() - diff)
+      const wedStr = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+      setSelectedSemanaChart(semanasDisponibles.find(d => d === wedStr) || semanasDisponibles[0])
+    }
+  }, [semanasDisponibles])
+
+  // 7. Volumen vs Precios (Composed) — promedio ponderado por día de la semana seleccionada
+  const volPrecData = React.useMemo(() => {
+    if (!selectedSemanaChart) return diasSemana.map(dia => ({ name: dia, Litros: 0, PrecioBs: '0', PrecioUSD: '0' }))
+
+    // Fechas exactas de cada día (Mié=+0 … Mar=+6)
+    const wedObj = new Date(selectedSemanaChart + 'T12:00:00')
+    const weekDates = diasSemana.map((_, i) => {
+      const d = new Date(wedObj)
+      d.setDate(wedObj.getDate() + i)
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+    })
+
+    // Precios configurados para la semana seleccionada
+    const preciosSemana = preciosSemanales.filter(p => p.fecha_semana === selectedSemanaChart)
+
+    return diasSemana.map((dia, index) => {
+      const dayDate = weekDates[index]
+
+      // Recepciones de ese día exacto (filtradas por fábrica y proveedor)
+      const dayRecs = recFiltered.filter(r => {
+        const fi = r.recepciones_camion?.fecha_ingreso
+        return fi && fi.substring(0, 10) === dayDate
+      })
+
+      const totalLitros = dayRecs.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0)
+
+      // Tasa BCV del día (o la última disponible)
+      const tasaForDay = tasas.find(t => t.fecha === dayDate)?.tasa ?? (tasas.length > 0 ? tasas[tasas.length - 1].tasa : 40)
+
+      // Promedio ponderado del precio en USD
+      let precioUSD = 0.40 // fallback
+      if (dayRecs.length > 0 && preciosSemana.length > 0) {
+        let sumPonderado = 0
+        let sumLitros = 0
+        for (const r of dayRecs) {
+          const grupo = r.ganaderos?.grupo
+          const ps = preciosSemana.find(p => p.grupo === grupo)
+          const precio = ps ? Number(ps.precio_leche_usd) : 0.40
+          const litros = Number(r.litros_recepcion || 0)
+          sumPonderado += precio * litros
+          sumLitros += litros
+        }
+        if (sumLitros > 0) precioUSD = sumPonderado / sumLitros
+      }
+
+      const precioBs = precioUSD * Number(tasaForDay)
+
+      return {
+        name: dia,
+        Litros: totalLitros,
+        PrecioBs: precioBs.toFixed(2),
+        PrecioUSD: precioUSD.toFixed(4)
+      }
+    })
+  }, [selectedSemanaChart, recFiltered, preciosSemanales, tasas])
 
   // Date formatter util
   function formatDateString(dateStr: string) {
@@ -133,6 +201,14 @@ export default function DashboardPage() {
     const parts = dateStr.split('-')
     if (parts.length === 3) return `${parts[2]}-${parts[1]}-${parts[0]}`
     return dateStr
+  }
+
+  function formatSemanaLabel(wedStr: string) {
+    const wed = new Date(wedStr + 'T12:00:00')
+    const tue = new Date(wed)
+    tue.setDate(wed.getDate() + 6)
+    const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
+    return `${fmt(wed)} - ${fmt(tue)}`
   }
 
   if (isLoading) return <div className="p-20 flex justify-center"><Loader2 className="animate-spin text-blue-500 w-12 h-12" /></div>
@@ -290,10 +366,25 @@ export default function DashboardPage() {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
         <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center mb-6 gap-4">
            <h3 className="font-bold text-slate-700 text-base sm:text-lg">Volúmenes Recolectados vs Precios Base</h3>
-           <div className="flex flex-wrap gap-2">
+           <div className="flex flex-wrap items-center gap-3">
+              {/* Selector de semana ganadera */}
+              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1.5 rounded-lg">
+                <Filter size={14} className="text-slate-400 ml-1 shrink-0" />
+                <select
+                  value={selectedSemanaChart}
+                  onChange={e => setSelectedSemanaChart(e.target.value)}
+                  className="bg-transparent border-none text-slate-700 text-xs focus:ring-0 font-medium cursor-pointer"
+                >
+                  {semanasDisponibles.length === 0 && <option value="">Sin semanas</option>}
+                  {semanasDisponibles.map(s => (
+                    <option key={s} value={s}>Sem. {formatSemanaLabel(s)}</option>
+                  ))}
+                </select>
+              </div>
+              {/* Toggles de series */}
               {Object.keys(showVolPrec).map(k => (
-                <button 
-                  key={k} 
+                <button
+                  key={k}
                   onClick={() => setShowVolPrec(prev => ({...prev, [k as keyof typeof prev]: !prev[k as keyof typeof prev]}))}
                   className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${showVolPrec[k as keyof typeof showVolPrec] ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-400 border-slate-300'}`}
                 >
