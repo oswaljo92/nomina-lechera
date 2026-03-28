@@ -44,9 +44,12 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const { userId, newPassword } = await request.json()
-    if (!userId || !newPassword || newPassword.length < 6) {
-      return NextResponse.json({ error: 'Datos inválidos. La contraseña debe tener al menos 6 caracteres.' }, { status: 400 })
+    const { userId, newPassword, newEmail } = await request.json()
+    if (!userId || (!newPassword && !newEmail)) {
+      return NextResponse.json({ error: 'Datos inválidos.' }, { status: 400 })
+    }
+    if (newPassword && newPassword.length < 6) {
+      return NextResponse.json({ error: 'La contraseña debe tener al menos 6 caracteres.' }, { status: 400 })
     }
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -60,8 +63,17 @@ export async function PATCH(request: Request) {
       { auth: { autoRefreshToken: false, persistSession: false } }
     )
 
-    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, { password: newPassword })
+    const updates: any = {}
+    if (newPassword) updates.password = newPassword
+    if (newEmail) updates.email = newEmail
+
+    const { error } = await supabaseAdmin.auth.admin.updateUserById(userId, updates)
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    // Sincronizar correo en perfiles_usuarios si cambió
+    if (newEmail) {
+      await supabaseAdmin.from('perfiles_usuarios').update({ email: newEmail }).eq('id', userId)
+    }
 
     return NextResponse.json({ ok: true }, { status: 200 })
   } catch (err: any) {

@@ -584,25 +584,21 @@ export default function GanaderosPage() {
                     <table className="min-w-full text-xs">
                       <thead className="bg-slate-50 sticky top-0">
                         <tr>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">#</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">Código</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">Nombre</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">Tipo</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">Cédula</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">RIF</th>
-                          <th className="px-3 py-2 text-left font-black text-slate-500">Teléfono</th>
+                          <th className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">#</th>
+                          {importRows.length > 0 && Object.keys(importRows[0]).map(col => (
+                            <th key={col} className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">{col}</th>
+                          ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {importRows.map((row, i) => (
                           <tr key={i} className="hover:bg-slate-50">
                             <td className="px-3 py-2 font-bold text-slate-400">{i + 2}</td>
-                            <td className="px-3 py-2 font-black text-blue-700">{row['Código Ganadero*'] || row['Código Ganadero'] || <span className="text-red-500">⚠ falta</span>}</td>
-                            <td className="px-3 py-2 font-semibold text-slate-800">{row['Nombre*'] || row['Nombre']}</td>
-                            <td className="px-3 py-2 text-slate-600">{row['Tipo (PROPIO/TERCERO)*'] || row['Tipo (PROPIO/TERCERO)']}</td>
-                            <td className="px-3 py-2 text-slate-600">{row['Cédula']}</td>
-                            <td className="px-3 py-2 text-slate-600">{row['RIF']}</td>
-                            <td className="px-3 py-2 text-slate-600">{row['Teléfono']}</td>
+                            {Object.keys(importRows[0]).map(col => (
+                              <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                                {String(row[col] ?? '')}
+                              </td>
+                            ))}
                           </tr>
                         ))}
                       </tbody>

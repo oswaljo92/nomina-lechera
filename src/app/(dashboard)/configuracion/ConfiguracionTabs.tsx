@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon } from 'lucide-react'
+import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
+import * as XLSX from 'xlsx'
 
 // CSV Utils
 const downloadCSV = (data: any[], filename: string) => {
@@ -36,9 +37,15 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
   const [verBorrados, setVerBorrados] = useState(false)
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [nuevoUser, setNuevoUser] = useState({ email: '', password: '', role: 'analista', nombre: '', telefono: '' })
   const [editUser, setEditUser] = useState<any>(null)
   const [editUserPassword, setEditUserPassword] = useState('')
+  const [editUserEmail, setEditUserEmail] = useState('')
+  const [importRows, setImportRows] = useState<any[]>([])
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; errores: string[] } | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { load() }, [])
 
@@ -47,7 +54,9 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
       if (e.key === 'Escape') {
          setIsCreateModalOpen(false)
          setIsEditModalOpen(false)
+         setIsImportModalOpen(false)
          setEditUserPassword('')
+         setEditUserEmail('')
          setErrorMSG('')
       }
     }
@@ -94,21 +103,29 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
   const handleEditUsuario = async (e: React.FormEvent) => {
      e.preventDefault()
      setLoading(true)
+     setErrorMSG('')
+
      await supabase.from('perfiles_usuarios').update({
         rol: editUser.rol,
         nombre: editUser.nombre,
         telefono: editUser.telefono
      }).eq('id', editUser.id)
-     if (editUserPassword) {
-        if (editUserPassword.length < 6) {
+
+     const needsAuthUpdate = editUserPassword || (editUserEmail && editUserEmail !== editUser.email)
+     if (needsAuthUpdate) {
+        if (editUserPassword && editUserPassword.length < 6) {
            setErrorMSG('La contraseña debe tener al menos 6 caracteres.')
            setLoading(false)
            return
         }
+        const body: any = { userId: editUser.id }
+        if (editUserPassword) body.newPassword = editUserPassword
+        if (editUserEmail && editUserEmail !== editUser.email) body.newEmail = editUserEmail
+
         const res = await fetch('/api/users', {
            method: 'PATCH',
            headers: { 'Content-Type': 'application/json' },
-           body: JSON.stringify({ userId: editUser.id, newPassword: editUserPassword })
+           body: JSON.stringify(body)
         })
         const data = await res.json()
         if (!res.ok) {
@@ -116,13 +133,78 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
            setLoading(false)
            return
         }
-        logAction(supabase, user, 'Usuarios', 'CAMBIAR_CLAVE', `Contraseña cambiada para: ${editUser.email}`)
+        if (editUserPassword) logAction(supabase, user, 'Usuarios', 'CAMBIAR_CLAVE', `Contraseña cambiada para: ${editUser.email}`)
+        if (body.newEmail) logAction(supabase, user, 'Usuarios', 'CAMBIAR_CORREO', `Correo actualizado: ${editUser.email} → ${body.newEmail}`)
      }
      logAction(supabase, user, 'Usuarios', 'EDITAR', `Editado usuario: ${editUser.email}`)
      setEditUserPassword('')
+     setEditUserEmail('')
      setIsEditModalOpen(false)
      load()
      setLoading(false)
+  }
+
+  const handleExportUsuarios = () => {
+     const rows = [...usuariosActivos, ...usuariosBorrados].map(u => ({
+        'Nombre': u.nombre || '',
+        'Correo': u.email || '',
+        'Teléfono': u.telefono || '',
+        'Rol': u.rol || '',
+        'Activo': u.activo !== false ? 'SI' : 'NO'
+     }))
+     const ws = XLSX.utils.json_to_sheet(rows)
+     const wb = XLSX.utils.book_new()
+     XLSX.utils.book_append_sheet(wb, ws, 'Usuarios')
+     XLSX.writeFile(wb, 'usuarios.xlsx')
+  }
+
+  const handleArchivoImportUsuarios = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0]
+     if (!file) return
+     const reader = new FileReader()
+     reader.onload = (ev) => {
+        const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+        const wb = XLSX.read(data, { type: 'array' })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[]
+        setImportRows(rows); setImportResult(null); setIsImportModalOpen(true)
+     }
+     reader.readAsArrayBuffer(file)
+     e.target.value = ''
+  }
+
+  const handleConfirmarImportUsuarios = async () => {
+     setImportLoading(true)
+     const errores: string[] = []
+     let ok = 0
+     for (let i = 0; i < importRows.length; i++) {
+        const row = importRows[i]
+        const fila = i + 2
+        const email = String(row['Correo*'] || row['Correo'] || '').trim()
+        const nombre = String(row['Nombre*'] || row['Nombre'] || '').trim()
+        const password = String(row['Contraseña*'] || row['Contraseña'] || '').trim()
+        const role = String(row['Rol (admin/analista)*'] || row['Rol'] || 'analista').trim().toLowerCase()
+
+        if (!email) { errores.push(`Fila ${fila}: Falta el correo.`); continue }
+        if (!password || password.length < 6) { errores.push(`Fila ${fila}: Contraseña inválida (mín 6 caracteres).`); continue }
+        if (!['admin', 'analista'].includes(role)) { errores.push(`Fila ${fila}: Rol debe ser 'admin' o 'analista'.`); continue }
+
+        const res = await fetch('/api/users', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({ email, password, role, nombre, telefono: String(row['Teléfono'] || '').trim() })
+        })
+        if (!res.ok) {
+           const d = await res.json()
+           errores.push(`Fila ${fila} (${email}): ${d.error}`)
+           continue
+        }
+        ok++
+     }
+     logAction(supabase, user, 'Usuarios', 'IMPORTAR_MASIVO', `Importados ${ok} usuarios. Errores: ${errores.length}`)
+     setImportResult({ ok, errores })
+     setImportLoading(false)
+     if (ok > 0) load()
   }
 
   const uList = verBorrados ? usuariosBorrados : usuariosActivos
@@ -137,12 +219,19 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
                <p className="text-xs text-slate-500">{verBorrados ? 'Usuarios que no tienen acceso al sistema.' : 'Personal con acceso al sistema.'}</p>
              </div>
              <div className="flex gap-2 flex-wrap">
-                <button onClick={()=>setVerBorrados(!verBorrados)} className="flex-1 sm:flex-none text-sm font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 bg-white px-4 py-2 rounded-lg shadow-sm transition-colors text-center">
+                <button onClick={()=>setVerBorrados(!verBorrados)} className="text-sm font-semibold text-slate-700 hover:text-slate-900 border border-slate-300 bg-white px-4 py-2 rounded-lg shadow-sm transition-colors">
                    {verBorrados ? 'Ver Activos' : 'Ver Borrados'}
                 </button>
+                <button onClick={handleExportUsuarios} className="flex items-center gap-2 text-sm font-bold text-emerald-700 border border-emerald-200 bg-emerald-50 px-4 py-2 rounded-lg shadow-sm hover:bg-emerald-100 transition-colors">
+                   <Download size={15}/> Exportar
+                </button>
+                <button onClick={() => importRef.current?.click()} className="flex items-center gap-2 text-sm font-bold text-blue-700 border border-blue-200 bg-blue-50 px-4 py-2 rounded-lg shadow-sm hover:bg-blue-100 transition-colors">
+                   <Upload size={15}/> Importar Excel
+                </button>
+                <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImportUsuarios} />
                 {!verBorrados && (
-                  <button onClick={() => setIsCreateModalOpen(true)} className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors">
-                     <Plus size={16}/> Nuevo Usuario
+                  <button onClick={() => setIsCreateModalOpen(true)} className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded-lg shadow-sm transition-colors">
+                     <Plus size={16}/> Nuevo
                   </button>
                 )}
              </div>
@@ -167,7 +256,7 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
                             </button>
                           ) : (
                             <>
-                              <button onClick={()=>{setEditUser(u); setIsEditModalOpen(true)}} className="text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50 p-2 rounded transition-colors" title="Editar Rol y Datos">
+                              <button onClick={()=>{setEditUser(u); setEditUserEmail(''); setIsEditModalOpen(true)}} className="text-blue-600 hover:text-white hover:bg-blue-600 bg-blue-50 p-2 rounded transition-colors" title="Editar Rol y Datos">
                                 <Edit2 size={16}/>
                               </button>
                               <button onClick={()=>toggleStatus(u.id, false, u.email)} className="text-red-600 hover:text-white hover:bg-red-600 bg-red-50 p-2 rounded transition-colors" title="Desactivar/Borrar Usuario">
@@ -240,19 +329,19 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
        )}
 
        {/* Edición Modal */}
-       {isEditModalOpen && (
+       {isEditModalOpen && editUser && (
           <div onClick={(e) => { if(e.target === e.currentTarget) setIsEditModalOpen(false) }} className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm animate-in fade-in pb-10">
              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden zoom-in-95 relative">
                 {loading && <div className="absolute inset-0 bg-white/70 backdrop-blur-sm z-20 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500 w-8 h-8"/></div>}
                 <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200">
-                   <h3 className="font-bold text-slate-800 text-sm px-6">Editar Usuario: {editUser.email}</h3>
-                   <button type="button" onClick={() => setIsEditModalOpen(false)} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors">
+                   <h3 className="font-bold text-slate-800 text-sm px-6">Editar Usuario: {editUser.nombre || editUser.email}</h3>
+                   <button type="button" onClick={() => { setIsEditModalOpen(false); setEditUserPassword(''); setEditUserEmail(''); setErrorMSG('') }} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors">
                       <X size={18}/>
                    </button>
                 </div>
                 <form className="p-6 space-y-4" onSubmit={handleEditUsuario}>
                     <div>
-                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nombre Completo (Display)</label>
+                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nombre Completo</label>
                        <input autoFocus required type="text" value={editUser.nombre || ''} onChange={e=>setEditUser({...editUser, nombre: e.target.value})} className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
                     </div>
                     <div>
@@ -260,19 +349,28 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
                        <input type="text" value={editUser.telefono || ''} onChange={e=>setEditUser({...editUser, telefono: e.target.value})} className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
                     </div>
                     <div>
-                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Reasignar Rol de Acceso</label>
+                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Rol de Acceso</label>
                        <select value={editUser.rol} onChange={e=>setEditUser({...editUser, rol: e.target.value})} className="w-full bg-white text-black font-bold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500">
                           <option value="analista">Analista</option>
                           <option value="admin">Administrador</option>
                        </select>
                     </div>
-                    <div>
-                       <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nueva Contraseña <span className="text-slate-400 font-normal normal-case">(dejar vacío para no cambiar)</span></label>
-                       <input type="password" value={editUserPassword} onChange={e=>setEditUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres" className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
+                    <div className="border-t border-slate-100 pt-4">
+                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Credenciales de Acceso (Admin)</p>
+                       <div className="space-y-3">
+                          <div>
+                             <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nuevo Correo Electrónico <span className="text-slate-400 font-normal normal-case">(dejar vacío para no cambiar)</span></label>
+                             <input type="email" value={editUserEmail} onChange={e=>setEditUserEmail(e.target.value)} placeholder={editUser.email} className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
+                          </div>
+                          <div>
+                             <label className="block text-xs font-bold text-slate-600 uppercase mb-1.5">Nueva Contraseña <span className="text-slate-400 font-normal normal-case">(dejar vacío para no cambiar)</span></label>
+                             <input type="password" value={editUserPassword} onChange={e=>setEditUserPassword(e.target.value)} placeholder="Mínimo 6 caracteres" className="w-full bg-white text-black font-semibold border border-slate-300 rounded-lg p-3 focus:ring-2 focus:ring-blue-500 placeholder-slate-400" />
+                          </div>
+                       </div>
                     </div>
                     {errorMSG && <p className="text-red-500 text-sm font-semibold">{errorMSG}</p>}
                     <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 mt-4">
-                       <button type="button" onClick={()=>{setIsEditModalOpen(false); setEditUserPassword(''); setErrorMSG('')}} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3.5 px-6 rounded-xl transition-all">
+                       <button type="button" onClick={()=>{setIsEditModalOpen(false); setEditUserPassword(''); setEditUserEmail(''); setErrorMSG('')}} className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-3.5 px-6 rounded-xl transition-all">
                           Cancelar
                        </button>
                        <button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white font-bold flex-1 rounded-xl shadow-lg shadow-blue-500/30 transition-all">
@@ -283,6 +381,82 @@ function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () 
              </div>
           </div>
         )}
+
+       {/* Modal Importar Usuarios Excel */}
+       {isImportModalOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+             <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto overflow-hidden animate-in zoom-in-95">
+                <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
+                   <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Upload size={16} className="text-blue-600"/> Importar Usuarios desde Excel</h3>
+                   <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="text-slate-400 hover:text-red-500"><X size={20}/></button>
+                </div>
+                <div className="p-4 sm:p-6">
+                   {importResult ? (
+                      <div className="space-y-4">
+                         <div className="flex gap-4">
+                            <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                               <CheckCircle2 className="text-emerald-500 mx-auto mb-2" size={32}/>
+                               <p className="text-2xl font-black text-emerald-700">{importResult.ok}</p>
+                               <p className="text-xs font-bold text-emerald-600">Usuarios creados</p>
+                            </div>
+                            {importResult.errores.length > 0 && (
+                               <div className="flex-1 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                                  <X className="text-red-500 mx-auto mb-2" size={32}/>
+                                  <p className="text-2xl font-black text-red-700">{importResult.errores.length}</p>
+                                  <p className="text-xs font-bold text-red-600">Filas con error</p>
+                               </div>
+                            )}
+                         </div>
+                         {importResult.errores.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-1">
+                               {importResult.errores.map((e, i) => <p key={i} className="text-xs text-red-700 font-semibold">• {e}</p>)}
+                            </div>
+                         )}
+                         <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="w-full bg-blue-600 text-white font-black py-3 rounded-xl">Cerrar</button>
+                      </div>
+                   ) : (
+                      <div className="space-y-4">
+                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3">
+                            <p className="text-xs font-bold text-amber-800">⚠️ Columnas requeridas: <span className="font-black">Nombre*, Correo*, Contraseña*, Rol (admin/analista)*</span>. Opcional: Teléfono</p>
+                         </div>
+                         <div className="bg-blue-50 border border-blue-200 rounded-xl p-3">
+                            <p className="text-xs font-bold text-blue-700">Se encontraron <span className="text-blue-900">{importRows.length} filas</span> en el archivo.</p>
+                         </div>
+                         <div className="overflow-x-auto max-h-64 border border-slate-200 rounded-xl">
+                            <table className="min-w-full text-xs">
+                               <thead className="bg-slate-50 sticky top-0">
+                                  <tr>
+                                     <th className="px-3 py-2 text-left font-black text-slate-500">#</th>
+                                     {importRows.length > 0 && Object.keys(importRows[0]).map(col => (
+                                        <th key={col} className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">{col}</th>
+                                     ))}
+                                  </tr>
+                               </thead>
+                               <tbody className="divide-y divide-slate-100">
+                                  {importRows.map((row, i) => (
+                                     <tr key={i} className="hover:bg-slate-50">
+                                        <td className="px-3 py-2 font-bold text-slate-400">{i + 2}</td>
+                                        {Object.keys(importRows[0]).map(col => (
+                                           <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">{String(row[col] ?? '')}</td>
+                                        ))}
+                                     </tr>
+                                  ))}
+                               </tbody>
+                            </table>
+                         </div>
+                         <div className="grid grid-cols-2 gap-3 pt-2">
+                            <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cancelar</button>
+                            <button onClick={handleConfirmarImportUsuarios} disabled={importLoading}
+                               className="bg-blue-600 text-white font-black py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-60">
+                               {importLoading ? <><Loader2 size={16} className="animate-spin"/> Importando...</> : <><Upload size={16}/> Confirmar</>}
+                            </button>
+                         </div>
+                      </div>
+                   )}
+                </div>
+             </div>
+          </div>
+       )}
 
      </div>
   )
@@ -372,34 +546,53 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
     load()
   }
 
+  const handleDescargarPlantillaTasas = () => {
+    const ws = XLSX.utils.json_to_sheet([{ 'Fecha (YYYY-MM-DD)*': '2025-01-15', 'Día*': 'Miércoles', 'Tasa BCV*': 36.5200 }])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+    XLSX.writeFile(wb, 'plantilla_tasas_bcv.xlsx')
+  }
+
+  const handleExportTasas = () => {
+    const rows = tasas.map(t => {
+      const match = semanasGanaderas.find(s => s.fecha === t.fecha)
+      return { 'Fecha': t.fecha, 'Día': t.dia, 'Semana Ganadera': match ? `Semana ${match.semana}` : '', 'Tasa BCV': t.tasa }
+    })
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Tasas BCV')
+    XLSX.writeFile(wb, 'tasas_bcv.xlsx')
+  }
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = async (evt) => {
-       const text = evt.target?.result as string
-       const lines = text.split('\n').filter(l => l.trim())
-       
-       const bulk = []
-       for (let i = 1; i < lines.length; i++) { 
-          const parts = lines[i].split(',')
-          const fecha = parts[0]
-          const dia = parts[1]
-          const tasaStr = parts[2]
-          if (fecha && tasaStr && !isNaN(parseFloat(tasaStr))) {
-            bulk.push({ fecha: fecha.trim(), dia: dia?.trim() || '', tasa: parseFloat(tasaStr) })
-          }
+       const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+       const wb = XLSX.read(data, { type: 'array' })
+       const ws = wb.Sheets[wb.SheetNames[0]]
+       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[]
+       const bulk: any[] = []
+       for (const row of rows) {
+         const fecha = String(row['Fecha (YYYY-MM-DD)*'] || row['Fecha'] || '').trim()
+         const dia = String(row['Día*'] || row['Día'] || '').trim()
+         const tasaStr = String(row['Tasa BCV*'] || row['Tasa BCV'] || '')
+         if (fecha && !isNaN(parseFloat(tasaStr))) {
+           bulk.push({ fecha, dia, tasa: parseFloat(tasaStr) })
+         }
        }
        if (bulk.length > 0) {
          await supabase.from('tasas_bcv').upsert(bulk)
-         logAction(supabase, user, 'Tasas BCV', 'IMPORTAR', `Cargados por CSV: ${bulk.length} registros de tasas`)
+         logAction(supabase, user, 'Tasas BCV', 'IMPORTAR', `Importados ${bulk.length} registros de tasas`)
          load()
-         alert('CSV Cargado con éxito')
+         alert(`✅ ${bulk.length} tasas importadas con éxito.`)
        } else {
-         alert('CSV vacío o formato incorrecto.')
+         alert('Archivo vacío o formato incorrecto.')
        }
     }
-    reader.readAsText(file)
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
   }
 
   const tasasFiltradas = tasas.filter(t => {
@@ -432,12 +625,15 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
                   <History size={16}/> Vitácora
                 </button>
               )}
-              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                <Upload size={16}/> CSV
+              <button onClick={handleDescargarPlantillaTasas} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <FileSpreadsheet size={16}/> Plantilla
               </button>
-              <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={handleUpload}/>
-              <button onClick={() => downloadCSV(tasas, 'tasas_bcv')} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                <Download size={16}/> Exportar
+              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <Upload size={16}/> Importar Excel
+              </button>
+              <input type="file" accept=".xlsx,.xls" ref={fileRef} className="hidden" onChange={handleUpload}/>
+              <button onClick={handleExportTasas} className="flex items-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <Download size={16}/> Exportar Excel
               </button>
               <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
@@ -602,33 +798,47 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
     load()
   }
 
+  const handleDescargarPlantillaCrios = () => {
+    const ws = XLSX.utils.json_to_sheet([{ 'Punto Crioscopico*': -0.530, '% Agua*': 0.0 }])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+    XLSX.writeFile(wb, 'plantilla_crioscopia.xlsx')
+  }
+
+  const handleExportCrios = () => {
+    const rows = crios.map(c => ({ 'Punto Crioscopico': c.punto_crioscopico, '% Agua': c.porcentaje_agua }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Crioscopía')
+    XLSX.writeFile(wb, 'tabla_crioscopia.xlsx')
+  }
+
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = async (evt) => {
-       const text = evt.target?.result as string
-       const lines = text.split('\n').filter(l => l.trim())
-       
-       const bulk = []
-       for (let i = 1; i < lines.length; i++) {
-          const parts = lines[i].split(',')
-          const pc = parseFloat(parts[0])
-          const pct = parseFloat(parts[1])
-          if (!isNaN(pc) && !isNaN(pct)) {
-            bulk.push({ punto_crioscopico: pc, porcentaje_agua: pct })
-          }
+       const data = new Uint8Array(evt.target?.result as ArrayBuffer)
+       const wb = XLSX.read(data, { type: 'array' })
+       const ws = wb.Sheets[wb.SheetNames[0]]
+       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as any[]
+       const bulk: any[] = []
+       for (const row of rows) {
+         const pc = parseFloat(String(row['Punto Crioscopico*'] || row['Punto Crioscopico'] || ''))
+         const pct = parseFloat(String(row['% Agua*'] || row['% Agua'] || ''))
+         if (!isNaN(pc) && !isNaN(pct)) bulk.push({ punto_crioscopico: pc, porcentaje_agua: pct })
        }
        if (bulk.length > 0) {
          await supabase.from('tabla_crioscopia').upsert(bulk)
-         logAction(supabase, user, 'Crioscopía', 'IMPORTAR', `Importados por CSV: ${bulk.length} registros de crioscopía`)
+         logAction(supabase, user, 'Crioscopía', 'IMPORTAR', `Importados ${bulk.length} puntos de crioscopía`)
          load()
-         alert('CSV de Crioscopía cargado con éxito')
+         alert(`✅ ${bulk.length} puntos crioscópicos importados.`)
        } else {
-         alert('CSV vacío o mal formateado.')
+         alert('Archivo vacío o formato incorrecto.')
        }
     }
-    reader.readAsText(file)
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
   }
 
   return (
@@ -650,12 +860,15 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
                   <History size={16}/> Vitácora
                 </button>
               )}
-              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                <Upload size={16}/> Subir CSV
+              <button onClick={handleDescargarPlantillaCrios} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <FileSpreadsheet size={16}/> Plantilla
               </button>
-              <input type="file" accept=".csv" ref={fileRef} className="hidden" onChange={handleUpload}/>
-              <button onClick={() => downloadCSV(crios, 'tabla_crioscopia')} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                <Download size={16}/> Exportar
+              <button onClick={() => fileRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <Upload size={16}/> Importar Excel
+              </button>
+              <input type="file" accept=".xlsx,.xls" ref={fileRef} className="hidden" onChange={handleUpload}/>
+              <button onClick={handleExportCrios} className="flex items-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
+                <Download size={16}/> Exportar Excel
               </button>
               <button onClick={() => setIsModalOpen(true)} className="flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors shadow-sm ml-auto">
                 <Plus size={16}/> Nuevo
@@ -975,6 +1188,24 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
      setSelectedRows([])
    }
 
+  const exportAsExcel = () => {
+    const rows = precios.map(p => ({
+      'Semana': formatDate(selectedSemana),
+      'Grupo': p.grupo || '',
+      'Ganaderos': (p.ganaderos || []).join(', '),
+      'Rutas': (p.rutas || []).join(', '),
+      'Precio Leche USD': p.precio_leche_usd || 0,
+      'Precio Flete USD': p.precio_flete_usd || 0,
+      'Total USD': p.total_pagar_usd || 0,
+      'Total Bs': p.total_pagar_bs || 0,
+    }))
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Precios')
+    XLSX.writeFile(wb, `precios_${selectedSemana}.xlsx`)
+    logAction(supabase, user, 'Precios', 'EXPORTAR', `Exportados precios de la semana ${formatDate(selectedSemana)}`)
+  }
+
   const exportAsImage = async () => {
     if (!tableRef.current) return
     try {
@@ -1046,6 +1277,9 @@ CREATE TABLE precios_semanales (
                <h3 className="font-bold text-slate-800 hidden md:block">Precios por Grupo</h3>
                <button onClick={exportAsImage} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
                  <ImageIcon size={14}/> Exportar Foto
+               </button>
+               <button onClick={exportAsExcel} className="flex items-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                 <Download size={14}/> Exportar Excel
                </button>
              </div>
              
