@@ -990,8 +990,15 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
   const [lecheUSD, setLecheUSD] = useState(p.precio_leche_usd || 0)
   const [fleteUSD, setFleteUSD] = useState(p.precio_flete_usd || 0)
   const [grupoNombre, setGrupoNombre] = useState(p.grupo || '')
-  
   const [ganaderosStr, setGanaderosStr] = useState<string[]>(p.ganaderos || [])
+
+  const handleCancel = () => {
+    setLecheUSD(p.precio_leche_usd || 0)
+    setFleteUSD(p.precio_flete_usd || 0)
+    setGrupoNombre(p.grupo || '')
+    setGanaderosStr(p.ganaderos || [])
+    setIsEditing(false)
+  }
   
   const selectedGanaderosObjs = ganaderosList.filter((g:any) => ganaderosStr.includes(g.codigo_ganadero))
   const rutasList = Array.from(new Set(selectedGanaderosObjs.map((g:any) => g.rutas?.codigo_ruta).filter(Boolean)))
@@ -1059,13 +1066,16 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
        
        <td className="border border-slate-200 text-right px-3 font-black text-emerald-700 bg-slate-50 whitespace-nowrap">{totalBs.toLocaleString('es-VE',{minimumFractionDigits:3})} Bs</td>
        <td className="border border-slate-200 text-right px-3 font-black text-emerald-700 bg-slate-50 whitespace-nowrap">{totalUSD.toLocaleString('es-VE',{minimumFractionDigits:3})} $</td>
-       <td className="no-export border border-slate-200 text-center py-2 space-x-2 px-2 whitespace-nowrap">
+       <td className="no-export border border-slate-200 text-center py-2 space-x-1 px-2 whitespace-nowrap">
          {isEditing ? (
-           <button onClick={handleSave} className="bg-blue-600 text-white px-2 py-1.5 rounded shadow-sm hover:bg-blue-700 transition-colors"><Save size={16}/></button>
+           <>
+             <button onClick={handleSave} className="bg-blue-600 text-white px-2 py-1.5 rounded shadow-sm hover:bg-blue-700 transition-colors"><Save size={16}/></button>
+             {p.id && <button onClick={handleCancel} className="bg-slate-100 text-slate-600 px-2 py-1.5 rounded hover:bg-slate-200 transition-colors" title="Cancelar"><X size={16}/></button>}
+           </>
          ) : (
            <button onClick={() => setIsEditing(true)} className="bg-slate-200 text-slate-700 px-2 py-1.5 rounded hover:bg-slate-300 transition-colors"><Edit2 size={16}/></button>
          )}
-         {p.id && (
+         {p.id && !isEditing && (
            <button onClick={() => borrarPrecio(p.id, p.grupo)} className="bg-red-50 text-red-600 px-2 py-1.5 rounded hover:bg-red-600 hover:text-white transition-colors"><Trash2 size={16}/></button>
          )}
        </td>
@@ -1171,9 +1181,12 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         logAction(supabase, user, 'Precios', 'EDITAR', `Actualizado precio semanal Grupo ${payload.grupo} (Semana ${formatDate(selectedSemana)})`)
       }
 
-      // Sincronizar grupo en la tabla de ganaderos
-      await supabase.from('ganaderos').update({ grupo: payload.grupo }).in('codigo_ganadero', payload.ganaderos)
-      
+      // Sincronizar grupo en ganaderos y en rutas (transporte)
+      if (payload.ganaderos?.length > 0)
+        await supabase.from('ganaderos').update({ grupo: payload.grupo }).in('codigo_ganadero', payload.ganaderos)
+      if (payload.rutas?.length > 0)
+        await supabase.from('rutas').update({ grupo: payload.grupo }).in('codigo_ruta', payload.rutas)
+
       const { data } = await supabase.from('precios_semanales').select('*').eq('fecha_semana', selectedSemana).order('created_at')
       if(data) setPrecios(data)
    }
@@ -1309,10 +1322,11 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
 
       const { error } = await supabase.from('precios_semanales').upsert(payload, { onConflict: 'fecha_semana,grupo' })
       if (error) { errores.push(`Fila ${fila}: Error — ${error.message}`); continue }
-      // Sincronizar grupo en la tabla de ganaderos (igual que en crear/editar)
-      if (ganaderosCodes.length > 0) {
+      // Sincronizar grupo en ganaderos y en rutas (transporte)
+      if (ganaderosCodes.length > 0)
         await supabase.from('ganaderos').update({ grupo }).in('codigo_ganadero', ganaderosCodes)
-      }
+      if (Array.from(rutasSet).length > 0)
+        await supabase.from('rutas').update({ grupo }).in('codigo_ruta', Array.from(rutasSet))
       ok++
     }
 
