@@ -293,7 +293,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: new Date(camion.fecha).toISOString(),
+         fecha_ingreso: camion.fecha,
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).eq('id', camion.id)
 
@@ -310,7 +310,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
-         fecha_ingreso: new Date(camion.fecha).toISOString(),
+         fecha_ingreso: camion.fecha,
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).select().single()
 
