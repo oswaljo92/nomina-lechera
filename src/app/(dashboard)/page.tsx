@@ -643,9 +643,20 @@ export default function DashboardPage() {
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-center text-[9px] text-slate-400 mt-1 font-semibold">
-            Última tasa: <span className="text-amber-600 font-black">{lastTasa.toFixed(3)} Bs/$</span>
-          </p>
+          {(() => {
+            const inicioTasa = bcvDiariaData[0]?.Tasa
+            const ultimaTasa = [...bcvDiariaData].reverse().find(d => d.Tasa !== null)?.Tasa
+            return (
+              <div className="flex justify-center gap-4 mt-1 flex-wrap">
+                <span className="text-[9px] font-semibold text-slate-400">
+                  Inicio sem. (Mié): <span className="text-blue-600 font-black">{inicioTasa != null ? `${inicioTasa.toFixed(3)} Bs/$` : '—'}</span>
+                </span>
+                <span className="text-[9px] font-semibold text-slate-400">
+                  Último día: <span className="text-amber-600 font-black">{ultimaTasa != null ? `${ultimaTasa.toFixed(3)} Bs/$` : '—'}</span>
+                </span>
+              </div>
+            )
+          })()}
         </div>
       </div>
 
