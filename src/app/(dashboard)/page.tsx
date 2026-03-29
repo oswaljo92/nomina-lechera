@@ -680,8 +680,8 @@ export default function DashboardPage() {
                 <YAxis yAxisId="right" orientation="right" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 11 }} domain={['auto', 'auto']} />
                 <Tooltip
                   contentStyle={{ borderRadius: '14px', border: '1px solid #e2e8f0', boxShadow: '0 20px 40px -10px rgb(0 0 0 / 0.15)', padding: '10px 14px' }}
-                  formatter={(value: any, name: string) => {
-                    const s = volPrecSeries.find(x => x.key === name)
+                  formatter={(value: any, name: any) => {
+                    const s = volPrecSeries.find((x: any) => x.key === name)
                     if (name === 'Litros') return [`${Number(value).toLocaleString('es-VE')} L`, 'Litros']
                     if (name === 'PrecioTotalBs') return [`${Number(value).toFixed(2)} Bs/L`, 'Total Bs/L']
                     return [`$${Number(value).toFixed(4)}/L`, s?.label || name]
