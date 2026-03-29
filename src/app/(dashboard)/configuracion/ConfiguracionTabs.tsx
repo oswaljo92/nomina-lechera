@@ -472,8 +472,24 @@ function TasasRow({ t, actualizarTasa, semana }: { t: any, actualizarTasa: any, 
     setIsEditing(false)
   }
 
+  const handleCancel = () => {
+    setVal(t.tasa)
+    setDiaVal(t.dia || '')
+    setIsEditing(false)
+  }
+
   return (
      <tr className="hover:bg-slate-50">
+        <td className="px-4 py-4 text-sm whitespace-nowrap">
+           {isEditing ? (
+             <div className="flex gap-1">
+               <button onClick={handleSave} className="bg-blue-600 text-white p-1.5 rounded font-bold"><Save size={14}/></button>
+               <button onClick={handleCancel} className="bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-600 p-1.5 rounded font-bold"><X size={14}/></button>
+             </div>
+           ) : (
+             <button onClick={() => setIsEditing(true)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-1.5 rounded font-bold"><Edit2 size={14}/></button>
+           )}
+        </td>
         <td className="px-6 py-4 text-sm font-extrabold text-slate-800">{formatDate(t.fecha)}</td>
         <td className="px-6 py-4 text-sm font-bold text-blue-700">
            <span className="bg-blue-50 border border-blue-100 px-2 py-1 rounded-md text-[10px] uppercase tracking-wider">{semana}</span>
@@ -487,21 +503,14 @@ function TasasRow({ t, actualizarTasa, semana }: { t: any, actualizarTasa: any, 
         </td>
         <td className="px-6 py-4 text-sm text-slate-500">
            {isEditing ? (
-             <input 
-               type="number" step="0.0001" 
-               value={val} 
+             <input
+               type="number" step="0.0001"
+               value={val}
                onChange={(e) => setVal(e.target.value)}
                className="border border-slate-300 bg-white text-black font-extrabold rounded p-1.5 w-32 focus:ring-2 focus:ring-blue-500"
               />
            ) : (
              <span className="font-extrabold">{t.tasa} Bs</span>
-           )}
-        </td>
-        <td className="px-6 py-4 text-sm">
-           {isEditing ? (
-             <button onClick={handleSave} className="bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs"><Save size={14}/></button>
-           ) : (
-             <button onClick={() => setIsEditing(true)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1 rounded font-bold text-xs"><Edit2 size={14}/></button>
            )}
         </td>
      </tr>
@@ -669,11 +678,11 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Fecha (DD-MM-YYYY)</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Semana Ganadera</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Día</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Tasa BS BCV</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
                </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 p-4">
@@ -735,26 +744,34 @@ function CriosRow({ t, actualizarCrio }: { t: any, actualizarCrio: any }) {
     setIsEditing(false)
   }
 
+  const handleCancel = () => {
+    setVal(t.porcentaje_agua)
+    setIsEditing(false)
+  }
+
   return (
      <tr className="hover:bg-slate-50">
+        <td className="px-4 py-4 text-sm whitespace-nowrap">
+           {isEditing ? (
+             <div className="flex gap-1">
+               <button onClick={handleSave} className="bg-blue-600 text-white p-1.5 rounded font-bold"><Save size={14}/></button>
+               <button onClick={handleCancel} className="bg-slate-200 hover:bg-red-100 text-slate-600 hover:text-red-600 p-1.5 rounded font-bold"><X size={14}/></button>
+             </div>
+           ) : (
+             <button onClick={() => setIsEditing(true)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 p-1.5 rounded font-bold"><Edit2 size={14}/></button>
+           )}
+        </td>
         <td className="px-6 py-4 text-sm font-black text-purple-800 tracking-tight">{t.punto_crioscopico}</td>
         <td className="px-6 py-4 text-sm text-slate-500">
            {isEditing ? (
-             <input 
-               type="number" step="0.1" 
-               value={val} 
+             <input
+               type="number" step="0.1"
+               value={val}
                onChange={(e) => setVal(e.target.value)}
                className="border border-slate-300 bg-white text-red-600 font-extrabold rounded p-1.5 w-32 focus:ring-2 focus:ring-blue-500"
               />
            ) : (
              <span className="font-extrabold">{t.porcentaje_agua}%</span>
-           )}
-        </td>
-        <td className="px-6 py-4 text-sm">
-           {isEditing ? (
-             <button onClick={handleSave} className="bg-blue-600 text-white px-3 py-1 rounded font-bold text-xs"><Save size={14}/></button>
-           ) : (
-             <button onClick={() => setIsEditing(true)} className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-1 rounded font-bold text-xs"><Edit2 size={14}/></button>
            )}
         </td>
      </tr>
@@ -899,9 +916,9 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
           <table className="min-w-full divide-y divide-slate-200">
             <thead className="bg-slate-50">
                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Punto (°H)</th>
                   <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">% Dcto Agua</th>
-                  <th className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase">Acciones</th>
                </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 p-4">

@@ -374,6 +374,7 @@ export default function GanaderosPage() {
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Cédula / RIF</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Teléfono</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">SAP</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Grupo</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Estado</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ruta / Tipo</th>
               </tr>
@@ -398,6 +399,11 @@ export default function GanaderosPage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600">{item.telefono || '—'}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-500">{item.sap || '—'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    {item.grupo
+                      ? <span className="bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{item.grupo}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <span className={`px-2 py-0.5 rounded-full text-[9px] font-black ${item.activo !== false ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>
                       {item.activo !== false ? 'ACTIVO' : 'BLOQUEADO'}
@@ -489,6 +495,7 @@ export default function GanaderosPage() {
                       type="text"
                       value={(editGanadero.cedula || '').replace(/^V/i, '')}
                       onChange={e => setEditGanadero({ ...editGanadero, cedula: 'V' + e.target.value.replace(/^V/i, '') })}
+                      onFocus={e => { const p = e.currentTarget.parentElement; if (p) p.scrollLeft = 0 }}
                       placeholder="20940780"
                       className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
                     />
@@ -503,7 +510,7 @@ export default function GanaderosPage() {
                         const nums = (editGanadero.rif || '').replace(/^[VEPJCGRvepjcgr]/, '')
                         setEditGanadero({ ...editGanadero, rif: e.target.value + nums })
                       }}
-                      className="bg-blue-50 text-blue-700 font-black text-sm px-2 py-2.5 border-r border-slate-300 focus:outline-none cursor-pointer"
+                      className="bg-blue-50 text-blue-700 font-black text-sm px-2 py-2.5 border-r border-slate-300 focus:outline-none cursor-pointer shrink-0"
                     >
                       {['V','E','P','J','C','G','R'].map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
@@ -516,6 +523,7 @@ export default function GanaderosPage() {
                         const pfx = valid.includes(prefix) ? prefix : 'J'
                         setEditGanadero({ ...editGanadero, rif: pfx + e.target.value.replace(/^[VEPJCGRvepjcgr]/, '') })
                       }}
+                      onFocus={e => { const p = e.currentTarget.parentElement; if (p) p.scrollLeft = 0 }}
                       placeholder="000193681"
                       className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
                     />

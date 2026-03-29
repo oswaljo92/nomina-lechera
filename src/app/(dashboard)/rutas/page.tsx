@@ -12,6 +12,7 @@ export default function RutasPage() {
   const supabase = createClient()
   const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [rutas, setRutas] = useState<any[]>([])
+  const [ganaderosMap, setGanaderosMap] = useState<Record<string, any[]>>({})
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -60,8 +61,18 @@ export default function RutasPage() {
 
     const rutaQ = supabase.from('rutas').select('*').order('created_at', { ascending: false })
     if (selectedFabricaId && selectedFabricaId !== 'all') rutaQ.eq('fabrica_id', selectedFabricaId)
-    const { data: rutasData } = await rutaQ
+    const ganaderosQ = supabase.from('ganaderos').select('codigo_ganadero, nombre, grupo, ruta_id').eq('activo', true)
+    const [{ data: rutasData }, { data: ganaderosData }] = await Promise.all([rutaQ, ganaderosQ])
     if (rutasData) setRutas(rutasData)
+    if (ganaderosData) {
+      const map: Record<string, any[]> = {}
+      for (const g of ganaderosData) {
+        if (!g.ruta_id) continue
+        if (!map[g.ruta_id]) map[g.ruta_id] = []
+        map[g.ruta_id].push(g)
+      }
+      setGanaderosMap(map)
+    }
     setLoading(false)
   }
 
@@ -123,6 +134,7 @@ export default function RutasPage() {
       sap: editRuta.sap || null,
       cedula: editRuta.cedula || null,
       rif: editRuta.rif || null,
+      grupo: editRuta.grupo || null,
       activo: editRuta.activo !== false,
       ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
     }
@@ -281,7 +293,7 @@ export default function RutasPage() {
                 <Trash2 size={16} /> Borrar ({selectedIds.size})
               </button>
             )}
-            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '' }); setErrorDuplicado(''); setIsModalOpen(true) }}
+            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '' }); setErrorDuplicado(''); setIsModalOpen(true) }}
               className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
               <Plus size={18} /> Nueva Ruta
             </button>
@@ -328,6 +340,8 @@ export default function RutasPage() {
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Acciones</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Código</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Nombre Ruta</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Grupo</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ganaderos</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Cédula / RIF</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">SAP</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Estado</th>
@@ -343,6 +357,24 @@ export default function RutasPage() {
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{ruta.codigo_ruta}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-bold text-slate-800">{ruta.nombre_ruta}</td>
+                  <td className="px-4 py-3 whitespace-nowrap text-center">
+                    {ruta.grupo
+                      ? <span className="bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{ruta.grupo}</span>
+                      : (() => { const g = ganaderosMap[ruta.id]?.[0]; return g?.grupo ? <span className="bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{g.grupo}</span> : <span className="text-slate-300">—</span> })()
+                    }
+                  </td>
+                  <td className="px-4 py-3 max-w-[250px]">
+                    <div className="flex flex-wrap gap-1">
+                      {(ganaderosMap[ruta.id] || []).length === 0
+                        ? <span className="text-slate-300 text-xs">—</span>
+                        : (ganaderosMap[ruta.id] || []).map((g: any) => (
+                            <span key={g.codigo_ganadero} className="bg-blue-100 text-blue-800 text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap">
+                              {g.codigo_ganadero} {g.nombre}
+                            </span>
+                          ))
+                      }
+                    </div>
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs text-slate-600">
                     {ruta.cedula && <div>CI: {ruta.cedula}</div>}
                     {ruta.rif && <div className="text-[10px] text-slate-400">RIF: {ruta.rif}</div>}
@@ -436,6 +468,7 @@ export default function RutasPage() {
                       type="text"
                       value={(editRuta.cedula || '').replace(/^V/i, '')}
                       onChange={e => setEditRuta({ ...editRuta, cedula: 'V' + e.target.value.replace(/^V/i, '') })}
+                      onFocus={e => { const p = e.currentTarget.parentElement; if (p) p.scrollLeft = 0 }}
                       placeholder="20940780"
                       className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
                     />
@@ -450,7 +483,7 @@ export default function RutasPage() {
                         const nums = (editRuta.rif || '').replace(/^[VEPJCGRvepjcgr]/, '')
                         setEditRuta({ ...editRuta, rif: e.target.value + nums })
                       }}
-                      className="bg-blue-50 text-blue-700 font-black text-sm px-2 py-2.5 border-r border-slate-300 focus:outline-none cursor-pointer"
+                      className="bg-blue-50 text-blue-700 font-black text-sm px-2 py-2.5 border-r border-slate-300 focus:outline-none cursor-pointer shrink-0"
                     >
                       {['V','E','P','J','C','G','R'].map(l => <option key={l} value={l}>{l}</option>)}
                     </select>
@@ -463,6 +496,7 @@ export default function RutasPage() {
                         const pfx = valid.includes(prefix) ? prefix : 'J'
                         setEditRuta({ ...editRuta, rif: pfx + e.target.value.replace(/^[VEPJCGRvepjcgr]/, '') })
                       }}
+                      onFocus={e => { const p = e.currentTarget.parentElement; if (p) p.scrollLeft = 0 }}
                       placeholder="000193681"
                       className="flex-1 p-2.5 text-sm font-bold focus:outline-none"
                     />
@@ -473,6 +507,12 @@ export default function RutasPage() {
                   <input type="text" value={editRuta.sap || ''} onChange={e => setEditRuta({ ...editRuta, sap: e.target.value })}
                     placeholder="Código SAP"
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Grupo</label>
+                  <input type="text" value={editRuta.grupo || ''} onChange={e => setEditRuta({ ...editRuta, grupo: e.target.value })}
+                    placeholder="Ej: 35"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500 uppercase" />
                 </div>
                 <div className="flex items-end">
                   <label className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer w-full">

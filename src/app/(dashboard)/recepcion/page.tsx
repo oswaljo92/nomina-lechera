@@ -526,7 +526,7 @@ export default function RecepcionPage() {
                       </div>
                       <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-2 text-center">
                         <div className="text-[10px] font-black text-emerald-600 uppercase">Total a Pagar</div>
-                        <div className="text-base font-black text-emerald-800">{totalLitrosPagarSemana.toLocaleString('es-VE')} L</div>
+                        <div className="text-base font-black text-emerald-800">{Math.round(totalLitrosPagarSemana).toLocaleString('es-VE')} L</div>
                       </div>
                     </div>
                   )}

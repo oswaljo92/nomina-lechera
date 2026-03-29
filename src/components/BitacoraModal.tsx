@@ -19,7 +19,7 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
   const [semanas, setSemanas] = useState<string[]>([])
   const [selectedSemana, setSelectedSemana] = useState('')
   const [bitacoraPage, setBitacoraPage] = useState(0)
-  const BITACORA_PAGE_SIZE = 20
+  const [bitacoraPageSize, setBitacoraPageSize] = useState(20)
 
   useEffect(() => {
     if (isOpen) {
@@ -91,8 +91,8 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
       (!moduleFilter && l.modulo?.toLowerCase().includes(search.toLowerCase()))
   })
 
-  const totalBitacoraPages = Math.ceil(filteredLogs.length / BITACORA_PAGE_SIZE)
-  const pagedLogs = filteredLogs.slice(bitacoraPage * BITACORA_PAGE_SIZE, (bitacoraPage + 1) * BITACORA_PAGE_SIZE)
+  const totalBitacoraPages = Math.ceil(filteredLogs.length / bitacoraPageSize)
+  const pagedLogs = filteredLogs.slice(bitacoraPage * bitacoraPageSize, (bitacoraPage + 1) * bitacoraPageSize)
 
   const formatDate = (iso: string) => {
     const d = new Date(iso)
@@ -173,9 +173,18 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
            )}
         </div>
 
-        {totalBitacoraPages > 1 && (
-          <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2 shrink-0">
-            <span className="text-xs font-bold text-slate-500">{filteredLogs.length} registros</span>
+        <div className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+            <span>Mostrar:</span>
+            {[10, 20, 30, 50].map(n => (
+              <button key={n} onClick={() => { setBitacoraPageSize(n); setBitacoraPage(0) }}
+                className={`px-2.5 py-1 rounded-lg font-bold transition-colors ${bitacoraPageSize === n ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}>
+                {n}
+              </button>
+            ))}
+            <span className="ml-1">de {filteredLogs.length}</span>
+          </div>
+          {totalBitacoraPages > 1 && (
             <div className="flex items-center gap-1">
               <button disabled={bitacoraPage === 0} onClick={() => setBitacoraPage(p => p - 1)}
                 className="p-1.5 rounded-lg bg-slate-200 text-slate-600 hover:bg-slate-300 disabled:opacity-40 flex items-center">
@@ -192,9 +201,9 @@ export default function BitacoraModal({ isOpen, onClose, moduleFilter, title }: 
                 <ChevronRight size={16} />
               </button>
             </div>
-            <span className="text-xs font-bold text-slate-500">{bitacoraPage + 1} / {totalBitacoraPages}</span>
-          </div>
-        )}
+          )}
+          <span className="text-xs font-bold text-slate-500">{bitacoraPage + 1} / {totalBitacoraPages || 1}</span>
+        </div>
       </div>
     </div>
   )
