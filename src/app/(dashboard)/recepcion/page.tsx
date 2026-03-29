@@ -829,11 +829,14 @@ export default function RecepcionPage() {
   )
 }
 
+const BITACORA_PAGE_SIZE = 20
+
 function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: () => void, module: string }) {
   const supabase = createClient()
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [bitacoraPage, setBitacoraPage] = useState(0)
 
   useEffect(() => {
     if (isOpen) fetchLogs()
@@ -841,16 +844,20 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
 
   const fetchLogs = async () => {
     setLoading(true)
-    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(100)
+    const { data } = await supabase.from('bitacora').select('*').eq('modulo', module).order('created_at', { ascending: false }).limit(500)
     if (data) setLogs(data)
     setLoading(false)
   }
 
-  const filtered = logs.filter(l => 
+  const filtered = logs.filter(l =>
     l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
     l.accion?.toLowerCase().includes(search.toLowerCase()) ||
     l.detalles?.toLowerCase().includes(search.toLowerCase())
   )
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / BITACORA_PAGE_SIZE))
+  const page = Math.min(bitacoraPage, totalPages - 1)
+  const paginated = filtered.slice(page * BITACORA_PAGE_SIZE, (page + 1) * BITACORA_PAGE_SIZE)
 
   if (!isOpen) return null
 
@@ -866,15 +873,15 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
           <div className="p-4 flex-1 overflow-hidden flex flex-col">
              <div className="relative mb-4 shrink-0">
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
-                <input type="text" placeholder="Filtrar..." value={search} onChange={e=>setSearch(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 font-bold text-sm" />
+                <input type="text" placeholder="Filtrar..." value={search} onChange={e=>{ setSearch(e.target.value); setBitacoraPage(0) }} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 font-bold text-sm" />
              </div>
              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500"/></div> : (
-                   filtered.map(log => (
+                   paginated.map(log => (
                       <div key={log.id} className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex flex-col gap-2">
                          <div className="flex justify-between items-center">
                             <span className="text-[9px] font-black text-slate-400 uppercase">{new Date(log.created_at).toLocaleString()}</span>
-                            <span className="px-1.5 py-0.5 rounded text-[8px] font-black bg-blue-100 text-blue-700 uppercase">{log.accion}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${log.accion === 'BORRAR' || log.accion?.includes('BORRAR') ? 'bg-red-100 text-red-700' : log.accion === 'CREAR' ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'}`}>{log.accion}</span>
                          </div>
                          <p className="text-xs font-bold text-slate-800 leading-tight">{log.detalles}</p>
                          <span className="text-[9px] font-medium text-slate-500 truncate italic">{log.usuario_email}</span>
@@ -882,6 +889,15 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
                    ))
                 )}
              </div>
+             {!loading && filtered.length > 0 && (
+               <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-100 shrink-0">
+                 <span className="text-xs font-bold text-slate-500">{filtered.length} registros · pág. {page + 1}/{totalPages}</span>
+                 <div className="flex gap-2">
+                   <button onClick={() => setBitacoraPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">← Anterior</button>
+                   <button onClick={() => setBitacoraPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">Siguiente →</button>
+                 </div>
+               </div>
+             )}
           </div>
        </div>
     </div>

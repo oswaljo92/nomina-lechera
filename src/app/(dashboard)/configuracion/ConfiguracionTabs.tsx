@@ -1587,11 +1587,14 @@ CREATE TABLE precios_semanales (
   )
 }
 
+const VITACORA_PAGE_SIZE = 20
+
 function VitacoraList({ moduloFilter }: { moduloFilter?: string }) {
   const supabase = createClient()
   const [logs, setLogs] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
 
   useEffect(() => {
     fetchLogs()
@@ -1599,31 +1602,34 @@ function VitacoraList({ moduloFilter }: { moduloFilter?: string }) {
 
   const fetchLogs = async () => {
     setLoading(true)
-    let query = supabase.from('bitacora').select('*').order('created_at', { ascending: false }).limit(200)
+    let query = supabase.from('bitacora').select('*').order('created_at', { ascending: false }).limit(500)
     if (moduloFilter) query = query.eq('modulo', moduloFilter)
-    
     const { data } = await query
     if (data) setLogs(data)
     setLoading(false)
   }
 
-  const filteredLogs = logs.filter(l => 
+  const filteredLogs = logs.filter(l =>
     l.usuario_email?.toLowerCase().includes(search.toLowerCase()) ||
     l.modulo?.toLowerCase().includes(search.toLowerCase()) ||
     l.accion?.toLowerCase().includes(search.toLowerCase()) ||
     l.detalles?.toLowerCase().includes(search.toLowerCase())
   )
 
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / VITACORA_PAGE_SIZE))
+  const currentPage = Math.min(page, totalPages - 1)
+  const paginatedLogs = filteredLogs.slice(currentPage * VITACORA_PAGE_SIZE, (currentPage + 1) * VITACORA_PAGE_SIZE)
+
   return (
     <div className="flex flex-col h-full min-h-[500px]">
        <div className="flex justify-between items-center gap-4 mb-4">
           <div className="relative flex-1 max-w-lg">
              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
-             <input 
-               type="text" 
-               placeholder="Filtrar registros..." 
+             <input
+               type="text"
+               placeholder="Filtrar registros..."
                value={search}
-               onChange={e=>setSearch(e.target.value)}
+               onChange={e=>{ setSearch(e.target.value); setPage(0) }}
                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 bg-white text-black font-extrabold focus:ring-2 focus:ring-blue-500 shadow-sm"
              />
           </div>
@@ -1632,14 +1638,14 @@ function VitacoraList({ moduloFilter }: { moduloFilter?: string }) {
           </button>
        </div>
 
-       <div className="overflow-y-auto pr-1">
+       <div className="overflow-y-auto pr-1 flex-1">
           {loading ? (
              <div className="flex flex-col items-center justify-center p-20">
                 <Loader2 className="animate-spin text-blue-500 w-12 h-12"/>
              </div>
           ) : (
-             <div className="space-y-3 pb-8">
-                {filteredLogs.map(log => (
+             <div className="space-y-3 pb-4">
+                {paginatedLogs.map(log => (
                    <div key={log.id} className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row md:items-center gap-4 hover:shadow-md transition-shadow">
                       <div className="shrink-0 flex md:flex-col items-center gap-2 md:gap-0 min-w-[120px]">
                          <span className="text-[10px] font-black text-slate-400">{new Date(log.created_at).toLocaleDateString()}</span>
@@ -1663,10 +1669,20 @@ function VitacoraList({ moduloFilter }: { moduloFilter?: string }) {
                       </div>
                    </div>
                 ))}
-                {filteredLogs.length === 0 && <div className="text-center py-20 text-slate-300 font-extrabold">No hay registros.</div>}
+                {paginatedLogs.length === 0 && <div className="text-center py-20 text-slate-300 font-extrabold">No hay registros.</div>}
              </div>
           )}
        </div>
+
+       {!loading && filteredLogs.length > 0 && (
+         <div className="flex items-center justify-between pt-3 mt-2 border-t border-slate-200 shrink-0">
+           <span className="text-xs font-bold text-slate-500">{filteredLogs.length} registros · pág. {currentPage + 1}/{totalPages}</span>
+           <div className="flex gap-2">
+             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={currentPage === 0} className="px-3 py-1.5 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">← Anterior</button>
+             <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1} className="px-3 py-1.5 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">Siguiente →</button>
+           </div>
+         </div>
+       )}
     </div>
   )
 }
