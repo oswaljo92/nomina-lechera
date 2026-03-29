@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2 } from 'lucide-react'
+import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
 import * as XLSX from 'xlsx'
@@ -1720,6 +1720,333 @@ function ModalVitacora({ modulo, isOpen, onClose }: { modulo: string, isOpen: bo
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FÁBRICAS TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function FabricasTab({ user }: { user: any }) {
+  const supabase = createClient()
+  const [fabricas, setFabricas] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [editFabrica, setEditFabrica] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => { loadFabricas() }, [])
+
+  const loadFabricas = async () => {
+    const { data } = await supabase
+      .from('fabricas')
+      .select('id, codigo, nombre, razon_social, rif, direccion_fiscal, activo')
+      .order('codigo')
+    setFabricas(data ?? [])
+    setLoading(false)
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editFabrica) return
+    setSaving(true)
+    await supabase.from('fabricas').update({
+      nombre: editFabrica.nombre,
+      razon_social: editFabrica.razon_social || null,
+      rif: editFabrica.rif || null,
+      direccion_fiscal: editFabrica.direccion_fiscal || null,
+    }).eq('id', editFabrica.id)
+    logAction(supabase, user, 'Fábricas', 'EDITAR', `Actualizada fábrica: ${editFabrica.nombre}`)
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+    loadFabricas()
+    setEditFabrica(null)
+  }
+
+  if (loading) return <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" size={28} /></div>
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-800">Fábricas</h2>
+          <p className="text-sm text-slate-500">Configura los datos fiscales de cada fábrica para las facturas digitales.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {fabricas.map(fab => (
+          <div key={fab.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cód. {fab.codigo}</span>
+                <h3 className="font-black text-slate-800 text-base">{fab.nombre}</h3>
+              </div>
+              <button
+                onClick={() => setEditFabrica({ ...fab })}
+                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              >
+                <Edit2 size={16} />
+              </button>
+            </div>
+            <div className="space-y-1.5 text-xs">
+              <p className="text-slate-600"><span className="font-semibold text-slate-400">Razón social:</span> {fab.razon_social || <span className="italic text-slate-300">Sin configurar</span>}</p>
+              <p className="text-slate-600"><span className="font-semibold text-slate-400">RIF:</span> {fab.rif || <span className="italic text-slate-300">Sin configurar</span>}</p>
+              <p className="text-slate-600 leading-snug"><span className="font-semibold text-slate-400">Dirección:</span> {fab.direccion_fiscal || <span className="italic text-slate-300">Sin configurar</span>}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Modal editar fábrica */}
+      {editFabrica && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          onClick={e => { if (e.target === e.currentTarget) setEditFabrica(null) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 rounded-t-2xl">
+              <h3 className="font-black text-slate-800">Editar Fábrica — {editFabrica.nombre}</h3>
+              <button onClick={() => setEditFabrica(null)} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre de la fábrica</label>
+                <input
+                  type="text"
+                  value={editFabrica.nombre}
+                  onChange={e => setEditFabrica((f: any) => ({ ...f, nombre: e.target.value }))}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Razón social (para facturas)</label>
+                <input
+                  type="text"
+                  value={editFabrica.razon_social ?? ''}
+                  onChange={e => setEditFabrica((f: any) => ({ ...f, razon_social: e.target.value }))}
+                  placeholder="Ej: C.A. Lácteos del Sur"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">RIF</label>
+                <input
+                  type="text"
+                  value={editFabrica.rif ?? ''}
+                  onChange={e => setEditFabrica((f: any) => ({ ...f, rif: e.target.value }))}
+                  placeholder="Ej: J-12345678-9"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Dirección fiscal</label>
+                <textarea
+                  value={editFabrica.direccion_fiscal ?? ''}
+                  onChange={e => setEditFabrica((f: any) => ({ ...f, direccion_fiscal: e.target.value }))}
+                  placeholder="Dirección completa..."
+                  rows={2}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setEditFabrica(null)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-60"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : saved ? <CheckCircle2 size={15} /> : <Save size={15} />}
+                  Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACTURACIÓN TAB (Catálogo de deducciones)
+// ─────────────────────────────────────────────────────────────────────────────
+function FacturacionConfigTab({ user }: { user: any }) {
+  const supabase = createClient()
+  const [deducciones, setDeducciones] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [editDed, setEditDed] = useState<any>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => { loadDeds() }, [])
+
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') { setIsModalOpen(false); setEditDed(null) } }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [])
+
+  const loadDeds = async () => {
+    const { data } = await supabase.from('deducciones_catalogo').select('*').order('codigo')
+    setDeducciones(data ?? [])
+    setLoading(false)
+  }
+
+  const openCreate = () => {
+    setEditDed({ codigo: '', nombre: '', activo: true })
+    setError('')
+    setIsModalOpen(true)
+  }
+
+  const openEdit = (d: any) => {
+    setEditDed({ ...d })
+    setError('')
+    setIsModalOpen(true)
+  }
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError('')
+    if (!editDed.codigo || !editDed.nombre) { setError('Código y nombre son obligatorios'); return }
+    setSaving(true)
+    if (editDed.id) {
+      await supabase.from('deducciones_catalogo').update({ codigo: editDed.codigo, nombre: editDed.nombre, activo: editDed.activo }).eq('id', editDed.id)
+      logAction(supabase, user, 'Facturación', 'EDITAR_DEDUCCION', `Actualizada deducción Cód.${editDed.codigo}: ${editDed.nombre}`)
+    } else {
+      await supabase.from('deducciones_catalogo').insert({ codigo: editDed.codigo, nombre: editDed.nombre, activo: true })
+      logAction(supabase, user, 'Facturación', 'CREAR_DEDUCCION', `Creada deducción Cód.${editDed.codigo}: ${editDed.nombre}`)
+    }
+    setSaving(false)
+    setIsModalOpen(false)
+    setEditDed(null)
+    loadDeds()
+  }
+
+  const toggleActivo = async (d: any) => {
+    await supabase.from('deducciones_catalogo').update({ activo: !d.activo }).eq('id', d.id)
+    logAction(supabase, user, 'Facturación', d.activo ? 'DESACTIVAR_DEDUCCION' : 'ACTIVAR_DEDUCCION', `Deducción Cód.${d.codigo}: ${d.nombre}`)
+    loadDeds()
+  }
+
+  const handleDelete = async (d: any) => {
+    if (!confirm(`¿Eliminar la deducción "${d.nombre}"?`)) return
+    await supabase.from('deducciones_catalogo').delete().eq('id', d.id)
+    logAction(supabase, user, 'Facturación', 'BORRAR_DEDUCCION', `Eliminada deducción Cód.${d.codigo}: ${d.nombre}`)
+    loadDeds()
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-black text-slate-800">Catálogo de Deducciones</h2>
+          <p className="text-sm text-slate-500">Deducciones disponibles para asignar a las facturas digitales.</p>
+        </div>
+        <button
+          onClick={openCreate}
+          className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm rounded-xl transition-colors"
+        >
+          <Plus size={15} /> Nueva deducción
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-10"><Loader2 className="animate-spin text-blue-500" size={28} /></div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {deducciones.length === 0 ? (
+            <p className="text-center py-12 text-slate-400 text-sm">Sin deducciones en el catálogo</p>
+          ) : (
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 border-b border-slate-200">
+                <tr>
+                  <th className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Código</th>
+                  <th className="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Nombre / Concepto</th>
+                  <th className="text-center px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</th>
+                  <th className="text-center px-5 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Acciones</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {deducciones.map(d => (
+                  <tr key={d.id} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-5 py-3 font-bold text-slate-700">{d.codigo}</td>
+                    <td className="px-5 py-3 text-slate-700">{d.nombre}</td>
+                    <td className="px-5 py-3 text-center">
+                      <button
+                        onClick={() => toggleActivo(d)}
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition-colors ${d.activo ? 'bg-green-100 text-green-700 hover:bg-green-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                      >
+                        {d.activo ? 'Activo' : 'Inactivo'}
+                      </button>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => openEdit(d)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={14} /></button>
+                        <button onClick={() => handleDelete(d)} className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Modal crear/editar */}
+      {isModalOpen && editDed && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          onClick={e => { if (e.target === e.currentTarget) setIsModalOpen(false) }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 rounded-t-2xl">
+              <h3 className="font-black text-slate-800">{editDed.id ? 'Editar' : 'Nueva'} Deducción</h3>
+              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg"><X size={18} /></button>
+            </div>
+            <form onSubmit={handleSave} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Código</label>
+                <input
+                  type="text"
+                  value={editDed.codigo}
+                  onChange={e => setEditDed((d: any) => ({ ...d, codigo: e.target.value }))}
+                  placeholder="Ej: 51"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1.5">Nombre / Concepto</label>
+                <input
+                  type="text"
+                  value={editDed.nombre}
+                  onChange={e => setEditDed((d: any) => ({ ...d, nombre: e.target.value }))}
+                  placeholder="Ej: Insumos Ganaderos"
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  required
+                />
+              </div>
+              {error && <p className="text-red-500 text-xs font-semibold">{error}</p>}
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl">Cancelar</button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl disabled:opacity-60"
+                >
+                  {saving && <Loader2 size={15} className="animate-spin" />}
+                  Guardar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function VitacoraTab({ user }: { user: any }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-6">
@@ -1754,6 +2081,8 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
+    { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2 },
+    { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt },
     { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, adminOnly: true },
   ]
 
@@ -1788,6 +2117,8 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
          {tab === 'tasas' && <TasasTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Tasas BCV' })} />}
          {tab === 'crioscopia' && <CrioscopiaTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Crioscopía' })} />}
          {tab === 'precios' && <PreciosTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Precios' })} />}
+         {tab === 'fabricas' && <FabricasTab user={currentUser} />}
+         {tab === 'facturacion' && <FacturacionConfigTab user={currentUser} />}
          {tab === 'vitacora' && <VitacoraTab user={currentUser} />}
       </div>
 
