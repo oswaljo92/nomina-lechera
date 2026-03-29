@@ -37,6 +37,9 @@ export default function RutasPage() {
   // Error duplicado en formulario
   const [errorDuplicado, setErrorDuplicado] = useState('')
 
+  // Para sincronizar grupo con precios_semanales
+  const [originalGrupo, setOriginalGrupo] = useState<string | null>(null)
+
   // Paginación
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(0)
@@ -142,6 +145,21 @@ export default function RutasPage() {
     if (editRuta.id) {
       await supabase.from('rutas').update(rutaPayload).eq('id', editRuta.id)
       logAction(supabase, curUser, 'Rutas', 'EDITAR', `Editada ruta: ${editRuta.nombre_ruta}`)
+
+      // Sincronizar grupo con precios_semanales si cambió
+      const nuevoGrupo = rutaPayload.grupo ?? null
+      if (nuevoGrupo !== originalGrupo) {
+        const { data: allPrecios } = await supabase.from('precios_semanales').select('id, grupo, rutas')
+        for (const precio of (allPrecios || [])) {
+          const rList = (precio.rutas || []) as string[]
+          const hasThis = rList.includes(editRuta.codigo_ruta)
+          if (hasThis && precio.grupo !== nuevoGrupo) {
+            await supabase.from('precios_semanales').update({ rutas: rList.filter((c: string) => c !== editRuta.codigo_ruta) }).eq('id', precio.id)
+          } else if (!hasThis && precio.grupo === nuevoGrupo && nuevoGrupo !== null) {
+            await supabase.from('precios_semanales').update({ rutas: [...rList, editRuta.codigo_ruta] }).eq('id', precio.id)
+          }
+        }
+      }
     } else {
       await supabase.from('rutas').insert(rutaPayload)
       logAction(supabase, curUser, 'Rutas', 'CREAR', `Creada ruta: ${editRuta.nombre_ruta}`)
@@ -293,7 +311,7 @@ export default function RutasPage() {
                 <Trash2 size={16} /> Borrar ({selectedIds.size})
               </button>
             )}
-            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '' }); setErrorDuplicado(''); setIsModalOpen(true) }}
+            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '' }); setOriginalGrupo(null); setErrorDuplicado(''); setIsModalOpen(true) }}
               className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
               <Plus size={18} /> Nueva Ruta
             </button>
@@ -323,7 +341,7 @@ export default function RutasPage() {
                   </span>
                 </div>
                 <div className="flex justify-end mt-3 gap-2">
-                  <button onClick={() => { setEditRuta(ruta); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
+                  <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
                   {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 bg-red-50 p-2 rounded-lg"><Trash2 size={15} /></button>}
                 </div>
               </div>
@@ -352,7 +370,7 @@ export default function RutasPage() {
                 <tr key={ruta.id} className="hover:bg-slate-50 transition-colors">
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} /></td>}
                   <td className="px-4 py-3 whitespace-nowrap flex gap-3">
-                    <button onClick={() => { setEditRuta(ruta); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
+                    <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
                     {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{ruta.codigo_ruta}</td>

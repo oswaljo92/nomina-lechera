@@ -37,6 +37,9 @@ export default function GanaderosPage() {
   // Error duplicado en formulario
   const [errorDuplicado, setErrorDuplicado] = useState('')
 
+  // Para sincronizar grupo con precios_semanales
+  const [originalGrupo, setOriginalGrupo] = useState<string | null>(null)
+
   // Paginación
   const [pageSize, setPageSize] = useState(10)
   const [currentPage, setCurrentPage] = useState(0)
@@ -144,6 +147,21 @@ export default function GanaderosPage() {
     if (editGanadero.id) {
       await supabase.from('ganaderos').update(payload).eq('id', editGanadero.id)
       logAction(supabase, curUser, 'Ganaderos', 'EDITAR', `Editado ganadero: ${payload.nombre}`)
+
+      // Sincronizar grupo con precios_semanales si cambió
+      const nuevoGrupo = payload.grupo ?? null
+      if (nuevoGrupo !== originalGrupo) {
+        const { data: allPrecios } = await supabase.from('precios_semanales').select('id, grupo, ganaderos')
+        for (const precio of (allPrecios || [])) {
+          const gList = (precio.ganaderos || []) as string[]
+          const hasThis = gList.includes(editGanadero.codigo_ganadero)
+          if (hasThis && precio.grupo !== nuevoGrupo) {
+            await supabase.from('precios_semanales').update({ ganaderos: gList.filter((c: string) => c !== editGanadero.codigo_ganadero) }).eq('id', precio.id)
+          } else if (!hasThis && precio.grupo === nuevoGrupo && nuevoGrupo !== null) {
+            await supabase.from('precios_semanales').update({ ganaderos: [...gList, editGanadero.codigo_ganadero] }).eq('id', precio.id)
+          }
+        }
+      }
     } else {
       await supabase.from('ganaderos').insert(payload)
       logAction(supabase, curUser, 'Ganaderos', 'CREAR', `Creado ganadero: ${payload.nombre}`)
@@ -320,6 +338,7 @@ export default function GanaderosPage() {
             )}
             <button onClick={() => {
               setEditGanadero({ codigo_ganadero: '', nombre: '', ruta_id: '', grupo: '', sap: '', cedula: '', rif: '', telefono: '', ubicacion: '', tipo_proveedor: 'TERCERO' })
+              setOriginalGrupo(null)
               setErrorDuplicado('')
               setIsModalOpen(true)
             }} className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
@@ -353,7 +372,7 @@ export default function GanaderosPage() {
                     <span className="ml-2 font-black text-blue-500 uppercase text-[10px]">{item.tipo_proveedor}</span>
                   </div>
                   <div className="flex gap-2 shrink-0">
-                    <button onClick={() => { setEditGanadero(item); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
+                    <button onClick={() => { setEditGanadero(item); setOriginalGrupo(item.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
                     {isAdmin && <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 bg-red-50 p-2 rounded-lg"><Trash2 size={15} /></button>}
                   </div>
                 </div>
@@ -384,7 +403,7 @@ export default function GanaderosPage() {
                 <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleSelection(item.id)} /></td>}
                   <td className="px-4 py-3 whitespace-nowrap text-sm flex gap-3">
-                    <button onClick={() => { setEditGanadero(item); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
+                    <button onClick={() => { setEditGanadero(item); setOriginalGrupo(item.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
                     {isAdmin && <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{item.codigo_ganadero}</td>
