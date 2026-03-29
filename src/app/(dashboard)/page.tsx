@@ -135,6 +135,7 @@ export default function DashboardPage() {
   const [filtroProveedor, setFiltroProveedor] = useState('Todos')
   const [preciosSemanales, setPreciosSemanales] = useState<any[]>([])
   const [selectedSemanaChart, setSelectedSemanaChart] = useState('')
+  const [selectedBcvSemana, setSelectedBcvSemana] = useState('')
 
   const [showQuality, setShowQuality] = useState({
     Grasa: true, Proteina: true, Temperatura: true, Crioscopia: false
@@ -329,34 +330,34 @@ export default function DashboardPage() {
     }
   }), [recFiltered])
 
-  // ── Fluctuación BCV por semana ganadera ───────────────────────────────────
-  const bcvSemanalData = useMemo(() => {
-    const byWeek = new Map<string, { sum: number, count: number, min: number, max: number }>()
-    for (const t of tasas) {
-      const wedStr = getWednesdayOfWeek(t.fecha)
-      const entry = byWeek.get(wedStr) || { sum: 0, count: 0, min: Infinity, max: -Infinity }
-      const v = Number(t.tasa)
-      entry.sum += v
-      entry.count += 1
-      entry.min = Math.min(entry.min, v)
-      entry.max = Math.max(entry.max, v)
-      byWeek.set(wedStr, entry)
-    }
-    return Array.from(byWeek.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([wedStr, { sum, count, min, max }]) => {
-        const wed = new Date(wedStr + 'T12:00:00')
-        const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
-        const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
-        return {
-          name: fmt(wed),
-          label: `${fmt(wed)} – ${fmt(tue)}/${tue.getFullYear()}`,
-          Promedio: Number((sum / count).toFixed(3)),
-          Mínima: Number(min.toFixed(3)),
-          Máxima: Number(max.toFixed(3)),
-        }
-      })
+  // ── BCV: semanas disponibles y datos diarios ───────────────────────────────
+  const bcvSemanasDispo = useMemo(() => {
+    const weeks = new Set<string>()
+    for (const t of tasas) weeks.add(getWednesdayOfWeek(t.fecha))
+    return Array.from(weeks).sort((a, b) => b.localeCompare(a))
   }, [tasas])
+
+  useEffect(() => {
+    if (bcvSemanasDispo.length > 0 && !selectedBcvSemana) {
+      const currentWed = getCurrentWednesday()
+      setSelectedBcvSemana(bcvSemanasDispo.includes(currentWed) ? currentWed : bcvSemanasDispo[0])
+    }
+  }, [bcvSemanasDispo])
+
+  const bcvDiariaData = useMemo(() => {
+    if (!selectedBcvSemana) return []
+    const diasNombres = ['Mié', 'Jue', 'Vie', 'Sáb', 'Dom', 'Lun', 'Mar']
+    const wedObj = new Date(selectedBcvSemana + 'T12:00:00')
+    return diasNombres.map((dia, i) => {
+      const d = new Date(wedObj)
+      d.setDate(wedObj.getDate() + i)
+      const fechaStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      return {
+        name: `${dia} ${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`,
+        Tasa: tasaMap.get(fechaStr) ?? null,
+      }
+    })
+  }, [selectedBcvSemana, tasaMap])
 
   // ── Semanas disponibles ────────────────────────────────────────────────────
   const semanasDisponibles = useMemo(() => {
@@ -609,40 +610,42 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-          <h3 className="font-bold text-slate-700 mb-1 text-sm uppercase tracking-widest text-center text-slate-500">Fluctuación Tasa BCV</h3>
-          <p className="text-center text-[10px] text-slate-400 font-semibold mb-3">Promedio por semana ganadera</p>
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <h3 className="font-bold text-slate-500 text-sm uppercase tracking-widest">Fluctuación Tasa BCV</h3>
+            <select
+              value={selectedBcvSemana}
+              onChange={e => setSelectedBcvSemana(e.target.value)}
+              className="border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-lg px-2 py-1 text-[10px] focus:ring-2 focus:ring-amber-400 cursor-pointer"
+            >
+              {bcvSemanasDispo.map(s => (
+                <option key={s} value={s}>{formatSemanaLabel(s)}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-center text-[9px] text-slate-400 font-semibold mb-2">Tasa diaria Bs/$</p>
           <div className="h-52">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={bcvSemanalData} margin={{ top: 5, right: 10, left: 0, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 700 }}
-                  interval={Math.max(0, Math.floor(bcvSemanalData.length / 5) - 1)}
-                  angle={-35}
-                  textAnchor="end"
-                />
-                <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9 }} width={45} tickFormatter={(v: number) => v.toFixed(0)} />
+              <LineChart data={bcvDiariaData} margin={{ top: 5, right: 8, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#fef3c7" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 700 }} />
+                <YAxis domain={['auto', 'auto']} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 9 }} width={44} tickFormatter={(v: number) => v.toFixed(0)} />
                 <Tooltip
                   contentStyle={{ borderRadius: '12px', border: '1px solid #fde68a', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)', fontSize: 11 }}
-                  formatter={(value: any, name: any) => [`${Number(value).toFixed(3)} Bs/$`, name]}
-                  labelFormatter={(_: any, payload: any) => payload?.[0]?.payload?.label || ''}
+                  formatter={(value: any) => value !== null ? [`${Number(value).toFixed(3)} Bs/$`, 'Tasa BCV'] : ['Sin dato', 'Tasa BCV']}
                 />
-                <Line type="monotone" dataKey="Promedio" stroke="#f59e0b" strokeWidth={2.5} dot={{ r: 4, fill: '#f59e0b', strokeWidth: 0 }} activeDot={{ r: 7, fill: '#d97706' }} />
-                <Line type="monotone" dataKey="Máxima" stroke="#ef4444" strokeWidth={1} strokeDasharray="4 3" dot={false} />
-                <Line type="monotone" dataKey="Mínima" stroke="#10b981" strokeWidth={1} strokeDasharray="4 3" dot={false} />
+                <Line
+                  type="monotone" dataKey="Tasa" stroke="#f59e0b" strokeWidth={2.5}
+                  dot={{ r: 5, fill: '#f59e0b', strokeWidth: 2, stroke: '#fff' }}
+                  activeDot={{ r: 8, fill: '#d97706', stroke: '#fde68a', strokeWidth: 2 }}
+                  connectNulls={false}
+                />
               </LineChart>
             </ResponsiveContainer>
           </div>
-          <div className="flex justify-center gap-4 mt-1">
-            <span className="flex items-center gap-1 text-[9px] font-bold text-amber-500"><span className="w-3 h-0.5 bg-amber-400 inline-block rounded"/>Prom</span>
-            <span className="flex items-center gap-1 text-[9px] font-bold text-red-400"><span className="w-3 h-0.5 bg-red-400 inline-block rounded"/>Máx</span>
-            <span className="flex items-center gap-1 text-[9px] font-bold text-emerald-500"><span className="w-3 h-0.5 bg-emerald-400 inline-block rounded"/>Mín</span>
-            <span className="text-[9px] font-black text-slate-500">Última: <span className="text-amber-600">{lastTasa.toFixed(3)} Bs/$</span></span>
-          </div>
+          <p className="text-center text-[9px] text-slate-400 mt-1 font-semibold">
+            Última tasa: <span className="text-amber-600 font-black">{lastTasa.toFixed(3)} Bs/$</span>
+          </p>
         </div>
       </div>
 
