@@ -25,6 +25,15 @@ function getWednesdayOfWeek(dateStr: string): string {
   return `${wed.getFullYear()}-${String(wed.getMonth() + 1).padStart(2, '0')}-${String(wed.getDate()).padStart(2, '0')}`
 }
 
+function getCurrentWednesday(): string {
+  const now = new Date()
+  const day = now.getDay()
+  const daysFromWed = day < 3 ? day + 4 : day - 3
+  const wed = new Date(now)
+  wed.setDate(now.getDate() - daysFromWed)
+  return `${wed.getFullYear()}-${String(wed.getMonth() + 1).padStart(2, '0')}-${String(wed.getDate()).padStart(2, '0')}`
+}
+
 function fmtUSD(n: number): string {
   return `$${n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
@@ -202,6 +211,9 @@ export default function DashboardPage() {
     let sumLecheUSD = 0, sumFleteUSD = 0
     let sumLecheBs = 0, sumFleteBs = 0
     let sumWeightedTotal = 0, sumLitros = 0
+    // Para precio prom ponderado Bs: solo semana en curso, tasa diaria real
+    let sumWeightedBsSemana = 0, sumLitrosSemana = 0
+    const currentWed = getCurrentWednesday()
 
     for (const r of recFiltered) {
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
@@ -221,12 +233,19 @@ export default function DashboardPage() {
       sumFleteBs += litros * precioFlete * tasa
       sumWeightedTotal += precioTotal * litros
       sumLitros += litros
+
+      // Precio prom ponderado Bs: acumular solo la semana en curso con tasa diaria
+      if (wedStr === currentWed) {
+        sumWeightedBsSemana += precioTotal * litros * tasa
+        sumLitrosSemana += litros
+      }
     }
 
     const precioPromUSD = sumLitros > 0 ? sumWeightedTotal / sumLitros : 0
+    const precioPromBs = sumLitrosSemana > 0 ? sumWeightedBsSemana / sumLitrosSemana : precioPromUSD * lastTasa
     return {
       precioPromUSD,
-      precioPromBs: precioPromUSD * lastTasa,
+      precioPromBs,
       totalPagarUSD: sumLecheUSD + sumFleteUSD,
       totalPagarBs: sumLecheBs + sumFleteBs,
       totalLecheUSD: sumLecheUSD,

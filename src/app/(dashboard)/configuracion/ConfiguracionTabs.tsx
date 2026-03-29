@@ -631,7 +631,7 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
            <div className="flex flex-wrap gap-2 items-center">
               {onOpenBitacora && (
                 <button onClick={onOpenBitacora} className="flex items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                  <History size={16}/> Vitácora
+                  <History size={16}/> Bitácora
                 </button>
               )}
               <button onClick={handleDescargarPlantillaTasas} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
@@ -874,7 +874,7 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
            <div className="flex flex-wrap gap-2 items-center">
               {onOpenBitacora && (
                 <button onClick={onOpenBitacora} className="flex items-center gap-2 bg-slate-200 text-slate-600 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
-                  <History size={16}/> Vitácora
+                  <History size={16}/> Bitácora
                 </button>
               )}
               <button onClick={handleDescargarPlantillaCrios} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors">
@@ -1638,6 +1638,15 @@ function VitacoraList({ moduloFilter }: { moduloFilter?: string }) {
           </button>
        </div>
 
+       {!loading && filteredLogs.length > 0 && (
+         <div className="flex items-center justify-between pb-3 mb-1 border-b border-slate-200 shrink-0">
+           <span className="text-xs font-bold text-slate-500">{filteredLogs.length} registros · pág. {currentPage + 1}/{totalPages}</span>
+           <div className="flex gap-2">
+             <button onClick={() => setPage(p => Math.max(0, p - 1))} disabled={currentPage === 0} className="px-3 py-1.5 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">← Anterior</button>
+             <button onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={currentPage >= totalPages - 1} className="px-3 py-1.5 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">Siguiente →</button>
+           </div>
+         </div>
+       )}
        <div className="overflow-y-auto pr-1 flex-1">
           {loading ? (
              <div className="flex flex-col items-center justify-center p-20">
@@ -1695,7 +1704,7 @@ function ModalVitacora({ modulo, isOpen, onClose }: { modulo: string, isOpen: bo
           <div className="flex justify-between items-center p-6 bg-slate-100 border-b border-slate-200">
              <div>
                 <h3 className="font-black text-slate-800 text-xl flex items-center gap-2">
-                   <History className="text-blue-600"/> Vitácora: {modulo}
+                   <History className="text-blue-600"/> Bitácora: {modulo}
                 </h3>
                 <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Historial de cambios detectados</p>
              </div>
@@ -1715,7 +1724,7 @@ function VitacoraTab({ user }: { user: any }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden p-6">
        <div className="mb-6">
-          <h3 className="text-xl font-black text-slate-800">Vitácora Global</h3>
+          <h3 className="text-xl font-black text-slate-800">Bitácora Global</h3>
           <p className="text-sm text-slate-500 font-bold">Control total de actividades en el sistema.</p>
        </div>
        <VitacoraList />
@@ -1745,7 +1754,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
-    { id: 'vitacora', label: 'Vitácora', shortLabel: 'Vitácora', icon: History, adminOnly: true },
+    { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, adminOnly: true },
   ]
 
   return (

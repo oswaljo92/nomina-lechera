@@ -482,7 +482,7 @@ export default function RecepcionPage() {
             <div className="flex gap-3 items-center w-full sm:w-auto justify-end px-2">
                {isAdmin && (
                  <button onClick={() => setIsBitacoraOpen(true)} className="flex items-center gap-2 px-3 py-1.5 font-bold text-slate-500 hover:text-slate-800 text-xs">
-                   <History size={16} /> Vitácora
+                   <History size={16} /> Bitácora
                  </button>
                )}
                {camion.id && tab === 'nuevo' && (
@@ -866,7 +866,7 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[85vh] overflow-hidden flex flex-col">
           <div className="flex justify-between items-center p-4 sm:p-6 bg-slate-50 border-b border-slate-200 shrink-0">
              <h3 className="font-black text-slate-800 text-base sm:text-lg flex items-center gap-2">
-                <History className="text-blue-600" size={20}/> Vitácora {module}
+                <History className="text-blue-600" size={20}/> Bitácora {module}
              </h3>
              <button onClick={onClose} className="text-slate-400 hover:text-red-500 transition-colors p-1"><X size={24}/></button>
           </div>
@@ -875,6 +875,15 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
                 <Search className="absolute left-3 top-2.5 text-slate-400" size={16}/>
                 <input type="text" placeholder="Filtrar..." value={search} onChange={e=>{ setSearch(e.target.value); setBitacoraPage(0) }} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 font-bold text-sm" />
              </div>
+             {!loading && filtered.length > 0 && (
+               <div className="flex items-center justify-between pb-2 mb-1 border-b border-slate-100 shrink-0">
+                 <span className="text-xs font-bold text-slate-500">{filtered.length} registros · pág. {page + 1}/{totalPages}</span>
+                 <div className="flex gap-2">
+                   <button onClick={() => setBitacoraPage(p => Math.max(0, p - 1))} disabled={page === 0} className="px-3 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">← Anterior</button>
+                   <button onClick={() => setBitacoraPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1} className="px-3 py-1 rounded-lg text-xs font-black bg-slate-100 text-slate-600 disabled:opacity-40 hover:bg-slate-200 transition-colors">Siguiente →</button>
+                 </div>
+               </div>
+             )}
              <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                 {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500"/></div> : (
                    paginated.map(log => (

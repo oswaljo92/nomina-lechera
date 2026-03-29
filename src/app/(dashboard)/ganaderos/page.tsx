@@ -819,6 +819,18 @@ function ModalVitacora({ isOpen, onClose, module }: { isOpen: boolean, onClose: 
               className="w-full pl-9 pr-4 py-1.5 rounded-lg border border-slate-300 font-bold text-xs" />
           </div>
         </div>
+        {totalBitacoraPages > 1 && (
+          <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 shrink-0">
+            <span className="text-xs font-bold text-slate-500">{filtered.length} registros</span>
+            <div className="flex items-center gap-1">
+              <button disabled={bitacoraPage === 0} onClick={() => setBitacoraPage(p => p-1)}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 disabled:opacity-40">‹ Ant</button>
+              <span className="text-xs font-bold text-slate-600 px-2">{bitacoraPage + 1} / {totalBitacoraPages}</span>
+              <button disabled={bitacoraPage >= totalBitacoraPages - 1} onClick={() => setBitacoraPage(p => p+1)}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-slate-200 text-slate-600 disabled:opacity-40">Sig ›</button>
+            </div>
+          </div>
+        )}
         <div className="p-4 flex-1 overflow-y-auto space-y-2">
           {loading ? <div className="p-10 flex justify-center"><Loader2 className="animate-spin text-blue-500" /></div> : (
             pagedLogs.length === 0 ? (
