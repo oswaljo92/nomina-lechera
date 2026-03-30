@@ -589,10 +589,10 @@ export default function FacturaFormModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col">
 
         {/* Header */}
-        <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 sticky top-0 z-10 rounded-t-2xl overflow-hidden">
+        <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 rounded-t-2xl overflow-hidden flex-shrink-0">
           <div className="px-6 py-4">
             <h3 className="font-black text-slate-800">
               {editFactura ? 'Editar Recibo Digital' : 'Nuevo Recibo Digital'}
@@ -607,7 +607,7 @@ export default function FacturaFormModal({
           </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 space-y-6">
+        <form onSubmit={handleSave} className="p-6 space-y-6 overflow-y-auto flex-1">
 
           {/* ── Sección: Emisor y semana ─────────────────────────── */}
           <Section title="Datos del emisor y semana">

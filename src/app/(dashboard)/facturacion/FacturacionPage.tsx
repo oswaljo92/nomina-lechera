@@ -520,8 +520,8 @@ export default function FacturacionPage() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4"
           onClick={e => { if (e.target === e.currentTarget) setViewFactura(null) }}
         >
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto">
-            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 sticky top-0 rounded-t-2xl overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-hidden flex flex-col">
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 rounded-t-2xl overflow-hidden flex-shrink-0">
               <div className="px-6 py-4">
                 <h3 className="font-black text-slate-800">Recibo Digital</h3>
                 <p className="text-xs text-slate-500">{viewFactura.tercero_nombre} · {viewFactura.semana_nombre}</p>
@@ -544,11 +544,13 @@ export default function FacturacionPage() {
                 </button>
               </div>
             </div>
-            <FacturaTemplate
-              factura={viewFactura}
-              deducciones={viewDeducciones}
-              captureId="factura-template"
-            />
+            <div className="overflow-y-auto flex-1">
+              <FacturaTemplate
+                factura={viewFactura}
+                deducciones={viewDeducciones}
+                captureId="factura-template"
+              />
+            </div>
           </div>
         </div>
       )}
