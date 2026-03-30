@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
-import { X, Plus, Trash2, Loader2, RefreshCcw } from 'lucide-react'
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { X, Plus, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getWednesdayOfDate, formatSemanaGanadera, calcularFactura, fmtBs, fmtNum,
+  getCurrentWednesday, formatSemanaGanadera, calcularFactura, fmtBs, fmtNum,
 } from '@/lib/facturacion-utils'
-import type { Factura, FacturaDeduccion, FacturaFormData, TipoFactura, DeduccionCatalogo } from '@/types/facturacion'
+import type { Factura, FacturaFormData, TipoFactura, DeduccionCatalogo } from '@/types/facturacion'
 
 interface Props {
   isOpen: boolean
@@ -63,12 +63,31 @@ export default function FacturaFormModal({
   const [newDed, setNewDed] = useState({ codigo: '', nombre: '', monto_bs: '' })
   const [showDedForm, setShowDedForm] = useState(false)
 
+  // Flete manual
+  const [tieneFlete, setTieneFlete] = useState(false)
+
+  // Búsqueda de ganadero
+  const [searchGanadero, setSearchGanadero] = useState('')
+  const [showGanDropdown, setShowGanDropdown] = useState(false)
+  const ganSearchRef = useRef<HTMLDivElement>(null)
+
   // ── Escape key ────────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
+
+  // ── Click fuera del dropdown ganadero ────────────────────────────────────
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (ganSearchRef.current && !ganSearchRef.current.contains(e.target as Node)) {
+        setShowGanDropdown(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
 
   // ── Cargar catálogos ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -110,6 +129,7 @@ export default function FacturaFormModal({
     if (!isOpen) return
 
     if (editFactura) {
+      setTieneFlete(editFactura.tipo === 'ganadero_transportista')
       setForm({
         fabrica_id: editFactura.fabrica_id,
         tipo: editFactura.tipo,
@@ -138,6 +158,8 @@ export default function FacturaFormModal({
       const fabId = currentFabricaId !== 'all' ? currentFabricaId : (fabricas[0]?.id ?? '')
       const fab = fabricas.find(f => f.id === fabId)
       const today = new Date().toISOString().split('T')[0]
+      setTieneFlete(false)
+      setSearchGanadero('')
       setForm({
         ...EMPTY_FORM,
         fabrica_id: fabId,
@@ -149,6 +171,35 @@ export default function FacturaFormModal({
     }
     setError('')
   }, [isOpen, editFactura])
+
+  // ── Auto-seleccionar semana en curso al crear nuevo ───────────────────────
+  useEffect(() => {
+    if (!isOpen || editFactura || semanas.length === 0) return
+    // Solo si no hay semana seleccionada aún
+    setForm(f => {
+      if (f.semana_fecha) return f
+      const currentWed = getCurrentWednesday()
+      const sem = semanas.find(s => s.fecha === currentWed)
+      if (!sem) return f
+      return {
+        ...f,
+        semana_fecha: currentWed,
+        semana_nombre: formatSemanaGanadera(currentWed),
+        tasa_miercoles: Number(sem.tasa),
+      }
+    })
+  }, [isOpen, editFactura, semanas])
+
+  // ── Sincronizar búsqueda al editar ────────────────────────────────────────
+  useEffect(() => {
+    if (!isOpen || !editFactura) return
+    if (editFactura.ganadero_id && ganaderos.length > 0) {
+      const gan = ganaderos.find(g => g.id === editFactura.ganadero_id)
+      if (gan) setSearchGanadero(`${gan.codigo_ganadero} — ${gan.nombre}`)
+    } else if (!editFactura.ganadero_id) {
+      setSearchGanadero('')
+    }
+  }, [isOpen, editFactura, ganaderos])
 
   // ── Cuando cambia fecha_emision → actualizar tasa_factura ─────────────────
   useEffect(() => {
@@ -171,6 +222,18 @@ export default function FacturaFormModal({
       }))
     }
   }, [form.semana_fecha, semanas])
+
+  // ── Ganaderos filtrados (búsqueda) ────────────────────────────────────────
+  const filteredGanaderos = useMemo(() => {
+    if (!searchGanadero.trim()) return ganaderos.slice(0, 20)
+    const q = searchGanadero.toLowerCase()
+    return ganaderos.filter(g =>
+      g.codigo_ganadero?.toLowerCase().includes(q) ||
+      g.nombre?.toLowerCase().includes(q) ||
+      g.rif?.toLowerCase().includes(q) ||
+      g.cedula?.toLowerCase().includes(q)
+    ).slice(0, 15)
+  }, [ganaderos, searchGanadero])
 
   // ── Cargar datos de litros al seleccionar ganadero + semana ──────────────
   const loadGanaderoData = useCallback(async (ganaderoId: string, semanaFecha: string) => {
@@ -235,6 +298,7 @@ export default function FacturaFormModal({
       tipo = 'ganadero_transportista'
       rutaId = ruta.id
       terceroCodigo = `${gan.codigo_ganadero}-${ruta.codigo_ruta}`
+      setTieneFlete(true)
 
       // Litros totales transportados en la semana por esa ruta
       if (camionIds.length > 0) {
@@ -247,6 +311,8 @@ export default function FacturaFormModal({
           (s: number, d: any) => s + Number(d.litros_a_pagar || d.litros_recepcion || 0), 0
         )
       }
+    } else {
+      setTieneFlete(false)
     }
 
     setForm(f => ({
@@ -264,6 +330,76 @@ export default function FacturaFormModal({
     }))
     setLoadingData(false)
   }, [ganaderos, form.fabrica_id, supabase])
+
+  // ── Activar/desactivar flete manual ──────────────────────────────────────
+  const handleFleteToggle = useCallback(async (checked: boolean) => {
+    setTieneFlete(checked)
+    if (!checked) {
+      setForm(f => ({
+        ...f,
+        tipo: 'ganadero',
+        precio_flete_usd: 0,
+        litros_flete: 0,
+        ruta_id: null,
+      }))
+      return
+    }
+    if (!form.ganadero_id || !form.semana_fecha) {
+      setForm(f => ({ ...f, tipo: 'ganadero_transportista' }))
+      return
+    }
+    setLoadingData(true)
+    const gan = ganaderos.find(g => g.id === form.ganadero_id)
+    if (!gan) { setLoadingData(false); return }
+
+    const { data: precioData } = await supabase
+      .from('precios_semanales')
+      .select('precio_flete_usd')
+      .eq('fecha_semana', form.semana_fecha)
+      .eq('grupo', gan.grupo)
+      .maybeSingle()
+    const precioFlete = Number(precioData?.precio_flete_usd ?? 0)
+
+    // Litros del flete por la ruta del ganadero
+    const ruta = Array.isArray(gan.rutas) ? gan.rutas[0] : gan.rutas
+    let litrosFlete = 0
+    let rutaId: string | null = ruta?.id ?? null
+
+    if (ruta) {
+      const wedDate = new Date(form.semana_fecha + 'T12:00:00')
+      const tueDate = new Date(wedDate)
+      tueDate.setDate(wedDate.getDate() + 6)
+      const tueStr = tueDate.toISOString().split('T')[0]
+
+      const { data: recepCamiones } = await supabase
+        .from('recepciones_camion')
+        .select('id')
+        .eq('fabrica_id', form.fabrica_id)
+        .gte('fecha_ingreso', form.semana_fecha)
+        .lte('fecha_ingreso', tueStr)
+
+      const camionIds = (recepCamiones ?? []).map((c: any) => c.id)
+      if (camionIds.length > 0) {
+        const { data: allDetalles } = await supabase
+          .from('recepciones_detalle')
+          .select('litros_a_pagar, litros_recepcion, ganaderos!inner(ruta_id)')
+          .in('recepcion_id', camionIds)
+          .eq('ganaderos.ruta_id', ruta.id)
+        litrosFlete = (allDetalles ?? []).reduce(
+          (s: number, d: any) => s + Number(d.litros_a_pagar || d.litros_recepcion || 0), 0
+        )
+      }
+    }
+
+    setForm(f => ({
+      ...f,
+      tipo: 'ganadero_transportista',
+      precio_flete_usd: precioFlete,
+      litros_flete: litrosFlete,
+      ruta_id: rutaId,
+    }))
+    setLoadingData(false)
+  }, [form.ganadero_id, form.semana_fecha, form.fabrica_id, ganaderos, supabase])
 
   const loadRutaData = useCallback(async (rutaId: string, semanaFecha: string) => {
     if (!rutaId || !semanaFecha) return
@@ -422,7 +558,6 @@ export default function FacturaFormModal({
     if (editFactura) {
       const { error: updErr } = await supabase.from('facturas').update(payload).eq('id', editFactura.id)
       if (updErr) { setError(updErr.message); setSaving(false); return }
-      // Borrar deducciones previas y re-insertar
       await supabase.from('facturas_deducciones').delete().eq('factura_id', editFactura.id)
     } else {
       const { data: ins, error: insErr } = await supabase.from('facturas').insert(payload).select('id').single()
@@ -430,7 +565,6 @@ export default function FacturaFormModal({
       facturaId = ins.id
     }
 
-    // Insertar deducciones
     if (form.deducciones.length > 0 && facturaId) {
       const dedsPayload = form.deducciones.map(d => ({
         factura_id: facturaId,
@@ -458,14 +592,17 @@ export default function FacturaFormModal({
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-y-auto">
 
         {/* Header */}
-        <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 sticky top-0 z-10 rounded-t-2xl">
-          <div>
+        <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 sticky top-0 z-10 rounded-t-2xl overflow-hidden">
+          <div className="px-6 py-4">
             <h3 className="font-black text-slate-800">
-              {editFactura ? 'Editar Factura' : 'Nueva Factura'}
+              {editFactura ? 'Editar Recibo Digital' : 'Nuevo Recibo Digital'}
             </h3>
-            <p className="text-xs text-slate-500 mt-0.5">Complete los datos de la factura digital</p>
+            <p className="text-xs text-slate-500 mt-0.5">Complete los datos del recibo digital</p>
           </div>
-          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors">
+          <button
+            onClick={onClose}
+            className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors self-stretch flex items-center"
+          >
             <X size={18} />
           </button>
         </div>
@@ -500,12 +637,12 @@ export default function FacturaFormModal({
 
               {/* Número de factura */}
               <div>
-                <label className="label">N° Factura (opcional)</label>
+                <label className="label">N° Recibo (opcional)</label>
                 <input
                   type="text"
                   value={form.numero_factura}
                   onChange={e => setForm(f => ({ ...f, numero_factura: e.target.value }))}
-                  placeholder="Ej: F-001-2025"
+                  placeholder="Ej: R-001-2025"
                   className="input"
                 />
               </div>
@@ -524,7 +661,6 @@ export default function FacturaFormModal({
                       semana_nombre: wStr ? formatSemanaGanadera(wStr) : '',
                       tasa_miercoles: sem ? Number(sem.tasa) : 0,
                     }))
-                    // Recargar litros si ya hay ganadero seleccionado
                     if (form.ganadero_id && wStr) loadGanaderoData(form.ganadero_id, wStr)
                     if (form.ruta_id && form.tipo === 'transportista' && wStr) loadRutaData(form.ruta_id, wStr)
                   }}
@@ -610,6 +746,8 @@ export default function FacturaFormModal({
                   value={form.tipo === 'transportista' ? 'transportista' : 'ganadero'}
                   onChange={e => {
                     const t = e.target.value
+                    setTieneFlete(false)
+                    setSearchGanadero('')
                     setForm(f => ({
                       ...f,
                       tipo: t as TipoFactura,
@@ -630,25 +768,93 @@ export default function FacturaFormModal({
               </div>
 
               {form.tipo !== 'transportista' ? (
-                <div>
-                  <label className="label">Ganadero {loadingData && <Loader2 size={12} className="inline animate-spin ml-1" />}</label>
-                  <select
-                    value={form.ganadero_id ?? ''}
-                    onChange={e => {
-                      setForm(f => ({ ...f, ganadero_id: e.target.value }))
-                      if (e.target.value && form.semana_fecha) {
-                        loadGanaderoData(e.target.value, form.semana_fecha)
-                      }
-                    }}
-                    className="input"
-                  >
-                    <option value="">— Seleccionar ganadero —</option>
-                    {ganaderos.map(g => (
-                      <option key={g.id} value={g.id}>
-                        {g.codigo_ganadero} — {g.nombre}
-                      </option>
-                    ))}
-                  </select>
+                /* ── Búsqueda de ganadero ── */
+                <div ref={ganSearchRef} className="relative">
+                  <label className="label">
+                    Ganadero {loadingData && <Loader2 size={12} className="inline animate-spin ml-1" />}
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={searchGanadero}
+                      onChange={e => {
+                        setSearchGanadero(e.target.value)
+                        setShowGanDropdown(true)
+                        // Si borra el texto, limpia la selección
+                        if (!e.target.value) {
+                          setTieneFlete(false)
+                          setForm(f => ({
+                            ...f,
+                            ganadero_id: null,
+                            tercero_codigo: '',
+                            tercero_nombre: '',
+                            tercero_rif: '',
+                            litros_a_pagar: 0,
+                            litros_flete: 0,
+                            tipo: 'ganadero',
+                          }))
+                        }
+                      }}
+                      onFocus={() => setShowGanDropdown(true)}
+                      placeholder="Buscar por código, nombre, RIF o cédula…"
+                      className="input pr-8"
+                    />
+                    {form.ganadero_id && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchGanadero('')
+                          setTieneFlete(false)
+                          setForm(f => ({
+                            ...f,
+                            ganadero_id: null,
+                            tercero_codigo: '',
+                            tercero_nombre: '',
+                            tercero_rif: '',
+                            litros_a_pagar: 0,
+                            litros_flete: 0,
+                            tipo: 'ganadero',
+                          }))
+                        }}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 transition-colors"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                  {showGanDropdown && filteredGanaderos.length > 0 && (
+                    <div className="absolute z-50 top-full left-0 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto mt-1">
+                      {filteredGanaderos.map(g => (
+                        <button
+                          key={g.id}
+                          type="button"
+                          className="w-full text-left px-3 py-2.5 text-xs hover:bg-blue-50 transition-colors border-b border-slate-50 last:border-0"
+                          onClick={() => {
+                            setSearchGanadero(`${g.codigo_ganadero} — ${g.nombre}`)
+                            setShowGanDropdown(false)
+                            setTieneFlete(false)
+                            if (form.semana_fecha) {
+                              loadGanaderoData(g.id, form.semana_fecha)
+                            } else {
+                              setForm(f => ({
+                                ...f,
+                                ganadero_id: g.id,
+                                tercero_nombre: g.nombre,
+                                tercero_rif: g.rif ?? '',
+                                tercero_codigo: g.codigo_ganadero,
+                              }))
+                            }
+                          }}
+                        >
+                          <span className="font-bold text-slate-800">{g.codigo_ganadero}</span>
+                          <span className="text-slate-600 ml-2">{g.nombre}</span>
+                          {(g.rif || g.cedula) && (
+                            <span className="text-slate-400 ml-2 float-right">{g.rif || g.cedula}</span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div>
@@ -674,9 +880,36 @@ export default function FacturaFormModal({
               )}
             </div>
 
-            {form.tipo === 'ganadero_transportista' && (
+            {/* Checkbox: Tiene flete (solo para ganaderos) */}
+            {form.tipo !== 'transportista' && form.ganadero_id && (
+              <div className="mt-3">
+                <label className="flex items-center gap-3 cursor-pointer select-none w-fit">
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      checked={tieneFlete}
+                      onChange={e => handleFleteToggle(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-10 h-5 bg-slate-200 rounded-full peer peer-checked:bg-blue-600 transition-colors" />
+                    <div className="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5" />
+                  </div>
+                  <span className="text-sm font-semibold text-slate-700">
+                    Tiene flete
+                    {loadingData && <Loader2 size={12} className="inline animate-spin ml-1 text-blue-500" />}
+                  </span>
+                </label>
+                {tieneFlete && (
+                  <p className="text-xs text-blue-600 mt-1 ml-14">
+                    Se incluirá flete en este recibo — tipo: Ganadero + Flete
+                  </p>
+                )}
+              </div>
+            )}
+
+            {form.tipo === 'ganadero_transportista' && !form.ganadero_id && (
               <div className="mt-2 p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 font-medium">
-                ✓ Este ganadero es también transportista — se incluirá flete en la misma factura.
+                ✓ Este ganadero es también transportista — se incluirá flete en el mismo recibo.
               </div>
             )}
 
@@ -701,7 +934,6 @@ export default function FacturaFormModal({
 
           {/* ── Sección: Deducciones ─────────────────────────────── */}
           <Section title="Deducciones">
-            {/* Catálogo rápido */}
             {catalogoDeducciones.length > 0 && (
               <div className="flex flex-wrap gap-2 mb-3">
                 {catalogoDeducciones.map(d => (
@@ -722,7 +954,6 @@ export default function FacturaFormModal({
               </div>
             )}
 
-            {/* Lista de deducciones */}
             {form.deducciones.length > 0 && (
               <div className="space-y-2 mb-3">
                 {form.deducciones.map((d, i) => (
@@ -746,7 +977,6 @@ export default function FacturaFormModal({
               </div>
             )}
 
-            {/* Formulario deducción personalizada */}
             {showDedForm ? (
               <div className="flex gap-2 items-end bg-slate-50 border border-slate-200 rounded-xl p-3">
                 <div className="w-20">
@@ -821,13 +1051,12 @@ export default function FacturaFormModal({
               className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors disabled:opacity-60"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : null}
-              {editFactura ? 'Guardar cambios' : 'Crear factura'}
+              {editFactura ? 'Guardar cambios' : 'Crear recibo'}
             </button>
           </div>
         </form>
       </div>
 
-      {/* Styles inline para clases input/label (evita importar CSS global) */}
       <style>{`
         .label { display:block; font-size:0.7rem; font-weight:600; color:#64748b; text-transform:uppercase; letter-spacing:0.05em; margin-bottom:0.25rem; }
         .input { width:100%; background:white; color:#0f172a; font-size:0.8rem; border:1px solid #cbd5e1; border-radius:0.5rem; padding:0.5rem 0.625rem; outline:none; }

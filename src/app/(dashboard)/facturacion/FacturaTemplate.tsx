@@ -87,7 +87,7 @@ export default function FacturaTemplate({
           </div>
           <div className="text-right">
             <div className="inline-block bg-slate-800 text-white px-4 py-2 rounded-lg">
-              <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Factura Digital</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Recibo Digital</p>
               {factura.numero_factura && (
                 <p className="text-base font-black mt-0.5">{factura.numero_factura}</p>
               )}

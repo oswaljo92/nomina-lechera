@@ -18,6 +18,7 @@ import {
 import type { Factura, FacturaDeduccion } from '@/types/facturacion'
 import FacturaFormModal from './FacturaFormModal'
 import FacturaTemplate from './FacturaTemplate'
+import BitacoraModal from '@/components/BitacoraModal'
 
 const TIPO_LABELS: Record<string, string> = {
   ganadero: 'Ganadero',
@@ -57,6 +58,7 @@ export default function FacturacionPage() {
   const [editFactura, setEditFactura] = useState<Factura | null>(null)
   const [viewFactura, setViewFactura] = useState<Factura | null>(null)
   const [viewDeducciones, setViewDeducciones] = useState<FacturaDeduccion[]>([])
+  const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
 
   // Exportación
   const [exporting, setExporting] = useState(false)
@@ -260,20 +262,28 @@ export default function FacturacionPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Facturación</h1>
-          <p className="text-slate-500 mt-1">Facturas digitales por semana ganadera.</p>
+          <p className="text-slate-500 mt-1">Recibos digitales por semana ganadera.</p>
         </div>
-        <button
-          onClick={() => { setEditFactura(null); setIsFormOpen(true) }}
-          className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm"
-        >
-          <Plus size={16} /> Nueva Factura
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsBitacoraOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl transition-colors shadow-sm text-sm"
+          >
+            <History size={15} /> Bitácora
+          </button>
+          <button
+            onClick={() => { setEditFactura(null); setIsFormOpen(true) }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm"
+          >
+            <Plus size={16} /> Nuevo Recibo Digital
+          </button>
+        </div>
       </div>
 
       {/* ── KPIs ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         {[
-          { label: 'Total facturas', value: kpis.total.toString(), color: 'from-blue-500 to-indigo-600' },
+          { label: 'Total recibos', value: kpis.total.toString(), color: 'from-blue-500 to-indigo-600' },
           { label: 'Semanas', value: kpis.semanas.toString(), color: 'from-cyan-500 to-blue-500' },
           { label: 'Total Bs', value: fmtBs(kpis.totalBs), color: 'from-emerald-500 to-teal-600' },
           { label: 'Total USD', value: fmtUSD(kpis.totalUSD), color: 'from-amber-500 to-orange-500' },
@@ -365,8 +375,8 @@ export default function FacturacionPage() {
         {filtered.length === 0 ? (
           <div className="text-center py-20 text-slate-400">
             <FileText size={40} className="mx-auto mb-3 opacity-30" />
-            <p className="font-semibold">No hay facturas registradas</p>
-            <p className="text-sm mt-1">Crea la primera con el botón &ldquo;Nueva Factura&rdquo;</p>
+            <p className="font-semibold">No hay recibos registrados</p>
+            <p className="text-sm mt-1">Crea el primero con el botón &ldquo;Nuevo Recibo Digital&rdquo;</p>
           </div>
         ) : (
           <>
@@ -511,12 +521,12 @@ export default function FacturacionPage() {
           onClick={e => { if (e.target === e.currentTarget) setViewFactura(null) }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[95vh] overflow-y-auto">
-            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 sticky top-0 rounded-t-2xl">
-              <div>
-                <h3 className="font-black text-slate-800">Factura Digital</h3>
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 sticky top-0 rounded-t-2xl overflow-hidden">
+              <div className="px-6 py-4">
+                <h3 className="font-black text-slate-800">Recibo Digital</h3>
                 <p className="text-xs text-slate-500">{viewFactura.tercero_nombre} · {viewFactura.semana_nombre}</p>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 pr-2">
                 <button
                   onClick={() => handleExportPDF(viewFactura)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg hover:bg-indigo-700 transition-colors no-print"
@@ -529,7 +539,7 @@ export default function FacturacionPage() {
                 >
                   <ImageIcon size={13} /> Imagen
                 </button>
-                <button onClick={() => setViewFactura(null)} className="p-2 text-slate-400 hover:text-slate-700 hover:bg-slate-200 rounded-lg transition-colors">
+                <button onClick={() => setViewFactura(null)} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors">
                   <X size={18} />
                 </button>
               </div>
@@ -552,6 +562,14 @@ export default function FacturacionPage() {
         user={curUser}
         fabricas={fabricasConFiscal}
         currentFabricaId={selectedFabricaId}
+      />
+
+      {/* ── Bitácora ────────────────────────────────────────────────────── */}
+      <BitacoraModal
+        isOpen={isBitacoraOpen}
+        onClose={() => setIsBitacoraOpen(false)}
+        moduleFilter="Facturación"
+        title="Bitácora — Facturación"
       />
 
       {/* ── Contenedor oculto para exportación bulk ──────────────────────── */}
