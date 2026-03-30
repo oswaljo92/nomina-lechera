@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { X, Plus, Trash2, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import {
-  getCurrentWednesday, formatSemanaGanadera, calcularFactura, fmtBs, fmtNum,
+  getCurrentWednesday, formatSemanaGanadera, getSemanaNumero, calcularFactura, fmtBs, fmtNum,
 } from '@/lib/facturacion-utils'
 import type { Factura, FacturaFormData, TipoFactura, DeduccionCatalogo } from '@/types/facturacion'
 
@@ -670,7 +670,7 @@ export default function FacturaFormModal({
                   <option value="">— Seleccionar semana —</option>
                   {semanas.map(s => (
                     <option key={s.fecha} value={s.fecha}>
-                      {formatSemanaGanadera(s.fecha)} (tasa: {fmtNum(s.tasa, 3)})
+                      Sem. {getSemanaNumero(s.fecha)} — {formatSemanaGanadera(s.fecha)} (tasa: {fmtNum(s.tasa, 3)})
                     </option>
                   ))}
                 </select>

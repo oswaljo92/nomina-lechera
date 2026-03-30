@@ -44,6 +44,15 @@ export function formatDateDisplay(isoDate: string): string {
   return `${d}/${m}/${y}`
 }
 
+/** Devuelve el número de semana ISO (1-53) a partir de la fecha del miércoles */
+export function getSemanaNumero(wednesdayIso: string): number {
+  const d = new Date(wednesdayIso + 'T12:00:00')
+  const day = d.getDay() || 7
+  d.setDate(d.getDate() + 4 - day) // jueves más cercano
+  const yearStart = new Date(d.getFullYear(), 0, 1)
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7)
+}
+
 // ── Cálculo de factura ───────────────────────────────────────────────────────
 
 /**

@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { DollarSign } from 'lucide-react'
 import type { Factura, FacturaDeduccion } from '@/types/facturacion'
 import {
-  fmtBs, fmtUSD, fmtNum, formatDateDisplay,
+  fmtBs, fmtUSD, fmtNum, formatDateDisplay, getSemanaNumero,
   calcularFactura, calcToUSD,
 } from '@/lib/facturacion-utils'
 
@@ -26,6 +26,7 @@ export default function FacturaTemplate({
   const [moneda, setMoneda] = useState<'bs' | 'usd'>('bs')
 
   const incluyeFlete = factura.tipo === 'ganadero_transportista' || factura.tipo === 'transportista'
+  const semanaNum = getSemanaNumero(factura.semana_fecha)
 
   // Recalcular con deducciones actuales (para previsualización dinámica)
   const calc = calcularFactura({
@@ -94,7 +95,7 @@ export default function FacturaTemplate({
             </div>
             <div className="mt-2 text-xs text-slate-600 space-y-0.5">
               <p><span className="font-semibold">Fecha de emisión:</span> {formatDateDisplay(factura.fecha_emision)}</p>
-              <p><span className="font-semibold">Semana ganadera:</span> {factura.semana_nombre}</p>
+              <p><span className="font-semibold">Semana ganadera:</span> N° {semanaNum} — {factura.semana_nombre}</p>
             </div>
           </div>
         </div>
@@ -156,7 +157,7 @@ export default function FacturaTemplate({
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
                   <tr className="bg-amber-50/50">
                     <td className="py-2 pl-4 text-amber-700 italic">
-                      Nota de débito diferencial semana {factura.semana_nombre} — leche
+                      Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_a_pagar, 0)}</td>
                     <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_leche_usd)}</td>
@@ -184,7 +185,7 @@ export default function FacturaTemplate({
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
                   <tr className="bg-amber-50/50">
                     <td className="py-2 pl-4 text-amber-700 italic">
-                      Nota de débito diferencial semana {factura.semana_nombre} — flete
+                      Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
                     <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_flete_usd)}</td>
@@ -212,7 +213,7 @@ export default function FacturaTemplate({
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
                   <tr className="bg-amber-50/50">
                     <td className="py-2 pl-4 text-amber-700 italic">
-                      Nota de débito diferencial semana {factura.semana_nombre} — flete
+                      Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
                     <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_flete_usd ?? 0)}</td>
