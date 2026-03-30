@@ -1,10 +1,10 @@
 'use client'
 
-import React, { useState } from 'react'
-import { DollarSign, RefreshCcw } from 'lucide-react'
+import { useState } from 'react'
+import { DollarSign } from 'lucide-react'
 import type { Factura, FacturaDeduccion } from '@/types/facturacion'
 import {
-  fmtBs, fmtUSD, fmtNum, formatDateDisplay, formatSemanaGanadera,
+  fmtBs, fmtUSD, fmtNum, formatDateDisplay,
   calcularFactura, calcToUSD,
 } from '@/lib/facturacion-utils'
 
@@ -248,7 +248,7 @@ export default function FacturaTemplate({
           )}
 
           <div className="border-t border-slate-200 pt-1.5">
-            <FooterRow label="ISLR retenido (1%)" value={`– ${fmt(display.islr_bs)}`} accent="orange" />
+            <FooterRow label="ISLR retención (1%) — ref." value={fmt(display.islr_bs)} accent="orange" />
           </div>
 
           <div className="border-t-2 border-slate-800 pt-2">

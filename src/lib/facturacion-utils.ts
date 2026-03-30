@@ -52,11 +52,9 @@ export function formatDateDisplay(isoDate: string): string {
  *   nota_deb_leche  = litros_a_pagar × precio_leche_usd × (tasa_factura − tasa_miercoles)
  *   flete_bs        = litros_flete × precio_flete_usd × tasa_miercoles  (si aplica)
  *   nota_deb_flete  = litros_flete × precio_flete_usd × (tasa_factura − tasa_miercoles)  (si aplica)
- *   subtotal_bs     = base_bs  (solo leche base, per spec)
- *   ded_total       = Σ deducciones
- *   base_islr       = subtotal_bs − ded_total
- *   islr_bs         = base_islr × 1%
- *   total_bs        = base_islr + islr_bs  (= base_islr × 1.01, per spec)
+ *   subtotal_bs     = base_bs − ded_total  (leche cruda menos deducciones)
+ *   islr_bs         = subtotal_bs × 1%  (retención referencial, no afecta el total)
+ *   total_bs        = subtotal_bs + flete_bs  (flete solo si ganadero_transportista o transportista)
  */
 export function calcularFactura(params: {
   litros_a_pagar: number
@@ -87,11 +85,11 @@ export function calcularFactura(params: {
   }
 
   const nota_debito_total_bs = nota_debito_leche_bs + nota_debito_flete_bs
-  const subtotal_bs = base_bs // Por spec: subtotal = solo base leche
   const deducciones_total_bs = deducciones.reduce((s, d) => s + Number(d.monto_bs), 0)
-  const base_islr_bs = subtotal_bs - deducciones_total_bs
-  const islr_bs = base_islr_bs * 0.01
-  const total_bs = base_islr_bs + islr_bs // Por spec: total = base_islr × 1.01
+  const subtotal_bs = base_bs - deducciones_total_bs  // leche cruda − deducciones
+  const base_islr_bs = subtotal_bs  // alias mantenido para compatibilidad
+  const islr_bs = subtotal_bs * 0.01  // retención referencial (no afecta el total)
+  const total_bs = subtotal_bs + (incluye_flete ? flete_bs : 0)
 
   return {
     base_bs,
