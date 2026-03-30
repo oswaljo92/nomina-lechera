@@ -1,5 +1,4 @@
 import jsPDF from 'jspdf'
-import html2canvas from 'html2canvas'
 import { toPng } from 'html-to-image'
 import JSZip from 'jszip'
 import { buildFacturaFilename } from './facturacion-utils'
@@ -18,37 +17,35 @@ export function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
-// ── Captura de elemento HTML ──────────────────────────────────────────────────
-
-async function captureElement(el: HTMLElement): Promise<HTMLCanvasElement> {
-  return html2canvas(el, {
-    backgroundColor: '#ffffff',
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    logging: false,
-  })
-}
-
 // ── Exportar a PDF ────────────────────────────────────────────────────────────
 
 export async function exportFacturaToPDFBlob(elementId: string): Promise<Blob> {
   const el = document.getElementById(elementId)
   if (!el) throw new Error(`Elemento #${elementId} no encontrado`)
 
-  // Ocultar botones no imprimibles
   const toHide = el.querySelectorAll<HTMLElement>('.no-print')
   toHide.forEach(e => { e.dataset.origDisplay = e.style.display; e.style.display = 'none' })
 
-  const canvas = await captureElement(el)
+  const dataUrl = await toPng(el, {
+    backgroundColor: '#ffffff',
+    pixelRatio: 2,
+    width: el.scrollWidth,
+    height: el.scrollHeight,
+    style: { overflow: 'visible' },
+  })
 
   toHide.forEach(e => { e.style.display = e.dataset.origDisplay || '' })
 
-  const imgData = canvas.toDataURL('image/png')
+  const img = await new Promise<HTMLImageElement>(resolve => {
+    const i = new Image()
+    i.onload = () => resolve(i)
+    i.src = dataUrl
+  })
+
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
   const pdfW = pdf.internal.pageSize.getWidth()
-  const pdfH = (canvas.height * pdfW) / canvas.width
-  pdf.addImage(imgData, 'PNG', 0, 0, pdfW, pdfH)
+  const pdfH = (img.height * pdfW) / img.width
+  pdf.addImage(dataUrl, 'PNG', 0, 0, pdfW, pdfH)
 
   return pdf.output('blob')
 }

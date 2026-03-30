@@ -249,7 +249,6 @@ export default function FacturaTemplate({
           )}
 
           <div className="border-t border-slate-200 pt-1.5">
-            <FooterRow label="Base ISLR" value={fmt(display.base_islr_bs)} />
             <FooterRow label="ISLR retenido (1%)" value={`– ${fmt(display.islr_bs)}`} accent="orange" />
           </div>
 
