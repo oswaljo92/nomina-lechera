@@ -539,7 +539,7 @@ export default function FacturacionPage() {
                 >
                   <ImageIcon size={13} /> Imagen
                 </button>
-                <button onClick={() => setViewFactura(null)} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors">
+                <button onClick={() => setViewFactura(null)} className="text-slate-400 hover:text-red-500 hover:bg-red-50 p-2 mr-3 rounded-lg transition-colors">
                   <X size={18} />
                 </button>
               </div>

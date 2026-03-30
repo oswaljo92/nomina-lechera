@@ -124,7 +124,14 @@ export default function FacturaTemplate({
 
       {/* ── CUERPO: ÍTEMS ────────────────────────────────────────── */}
       <div className="px-8 py-4">
-        <table className="w-full text-xs">
+        <table className="w-full text-xs table-fixed">
+          <colgroup>
+            <col className="w-[42%]" />
+            <col className="w-[13%]" />
+            <col className="w-[16%]" />
+            <col className="w-[13%]" />
+            <col className="w-[16%]" />
+          </colgroup>
           <thead>
             <tr className="border-b-2 border-slate-300">
               <th className="text-left py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Concepto</th>
@@ -225,27 +232,19 @@ export default function FacturaTemplate({
       <div className="px-8 pb-8">
         <div className="ml-auto max-w-xs space-y-1.5 border-t-2 border-slate-300 pt-3">
 
-          <FooterRow label="Subtotal" value={fmt(display.subtotal_bs)} />
-
           {(factura.tasa_factura !== factura.tasa_miercoles) && (
             <FooterRow
-              label="Nota de débito diferencial (total)"
+              label="Total Nota de Débito"
               value={fmt(display.nota_debito_total_bs)}
               accent="amber"
             />
           )}
 
-          {deducciones.length > 0 && deducciones.map((d, i) => (
-            <FooterRow
-              key={i}
-              label={`Ded. Cód.${d.codigo} — ${d.nombre}`}
-              value={`– ${fmt(moneda === 'bs' ? d.monto_bs : d.monto_bs / factura.tasa_factura)}`}
-              accent="red"
-            />
-          ))}
+          {/* Subtotal = leche cruda − deducciones */}
+          <FooterRow label="Subtotal" value={fmt(display.base_islr_bs)} />
 
-          {deducciones.length > 0 && (
-            <FooterRow label="Total deducciones" value={`– ${fmt(display.deducciones_total_bs)}`} accent="red" />
+          {incluyeFlete && display.flete_bs > 0 && (
+            <FooterRow label="Flete" value={fmt(display.flete_bs)} />
           )}
 
           <div className="border-t border-slate-200 pt-1.5">
