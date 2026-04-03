@@ -180,26 +180,41 @@ export default function RecepcionPage() {
        fecha: new Date(hc.fecha_ingreso).toISOString().split('T')[0]
      })
      
-     const mappedDetalles = (hc.recepciones_detalle || []).map((d: any) => ({
-        id_temp: Math.random().toString(),
-        ganadero_id: d.ganadero_id,
-        codigo_ganadero: d.ganaderos?.codigo_ganadero || '',
-        nombre: d.ganaderos?.nombre || '',
-        ubicacion: d.ganaderos?.ubicacion || '',
-        ruta_nombre: '', 
-        tipo_proveedor: d.ganaderos?.tipo_proveedor || '',
-        litros_recepcion: d.litros_recepcion,
-        grasa: d.grasa,
-        proteina: d.proteina,
-        acidez: d.acidez,
-        temperatura: d.temperatura,
-        h_reductasa: d.h_reductasa,
-        ufc: d.ufc,
-        crioscopia: d.crioscopia != null ? String(d.crioscopia) : '',
-        porcentaje_agua_desc: d.porcentaje_agua_desc,
-        litros_descuento: d.litros_descuento,
-        litros_a_pagar: d.litros_a_pagar
-     }))
+     const mappedDetalles = (hc.recepciones_detalle || []).map((d: any) => {
+        const crioNum = parseFloat(d.crioscopia)
+        const lts = Number(d.litros_recepcion) || 0
+        let pctAgua = d.porcentaje_agua_desc || 0
+        let litrosDesc = d.litros_descuento || 0
+        let litrosPagar = d.litros_a_pagar ?? lts
+        if (!isNaN(crioNum) && crioscopia.length > 0) {
+          const nearest = crioscopia.reduce((prev: any, curr: any) =>
+            Math.abs(curr.punto_crioscopico - crioNum) < Math.abs(prev.punto_crioscopico - crioNum) ? curr : prev
+          , crioscopia[0])
+          pctAgua = nearest.porcentaje_agua || 0
+          litrosDesc = (lts * pctAgua) / 100
+          litrosPagar = lts - litrosDesc
+        }
+        return {
+          id_temp: Math.random().toString(),
+          ganadero_id: d.ganadero_id,
+          codigo_ganadero: d.ganaderos?.codigo_ganadero || '',
+          nombre: d.ganaderos?.nombre || '',
+          ubicacion: d.ganaderos?.ubicacion || '',
+          ruta_nombre: '',
+          tipo_proveedor: d.ganaderos?.tipo_proveedor || '',
+          litros_recepcion: d.litros_recepcion,
+          grasa: d.grasa,
+          proteina: d.proteina,
+          acidez: d.acidez,
+          temperatura: d.temperatura,
+          h_reductasa: d.h_reductasa,
+          ufc: d.ufc,
+          crioscopia: d.crioscopia != null ? String(d.crioscopia) : '',
+          porcentaje_agua_desc: pctAgua,
+          litros_descuento: litrosDesc,
+          litros_a_pagar: litrosPagar,
+        }
+     })
      
      setDetalles(mappedDetalles)
      setTab('nuevo')
