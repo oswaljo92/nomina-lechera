@@ -1482,36 +1482,37 @@ CREATE TABLE precios_semanales (
        )}
 
        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
-          <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-3">
-             <div className="flex gap-2 items-center flex-wrap">
+          <div className="p-4 bg-slate-50 border-b border-slate-200 flex flex-wrap justify-between items-center gap-3">
+             <div className="flex items-center gap-3">
                <h3 className="font-bold text-slate-800 hidden md:block">Precios por Grupo</h3>
-               <button onClick={exportAsImage} className="flex items-center gap-2 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                 <ImageIcon size={14}/> Exportar Foto
-               </button>
-               <button onClick={exportAsExcel} className="flex items-center gap-2 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                 <Download size={14}/> Exportar Excel
-               </button>
-               <button onClick={handleDescargarPlantillaPrecios} className="flex items-center gap-2 bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                 <FileSpreadsheet size={14}/> Plantilla
-               </button>
-               <button onClick={() => importRef.current?.click()} className="flex items-center gap-2 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
-                 <Upload size={14}/> Importar Excel
-               </button>
-               <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImportPrecios} />
+               <div className="grid grid-cols-2 gap-1.5">
+                 <button onClick={exportAsImage} className="flex items-center gap-1.5 bg-slate-200 text-slate-700 hover:bg-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                   <ImageIcon size={14}/> Exportar Foto
+                 </button>
+                 <button onClick={exportAsExcel} className="flex items-center gap-1.5 bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                   <Download size={14}/> Exportar Excel
+                 </button>
+                 <button onClick={handleDescargarPlantillaPrecios} className="flex items-center gap-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                   <FileSpreadsheet size={14}/> Plantilla
+                 </button>
+                 <button onClick={() => importRef.current?.click()} className="flex items-center gap-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                   <Upload size={14}/> Importar Excel
+                 </button>
+                 <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImportPrecios} />
+               </div>
              </div>
-             
-             <div className="flex gap-2 items-center w-full md:w-auto overflow-x-auto">
-               <div className="relative group shrink-0">
+
+             <div className="flex gap-2 items-center">
+               <div className="relative group">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" size={14}/>
-                  <input 
-                    type="text" 
-                    placeholder="Buscar por grupo, ruta, $/Bs..." 
+                  <input
+                    type="text"
+                    placeholder="Buscar por grupo, ruta, $/Bs..."
                     value={busqueda}
                     onChange={e=>setBusqueda(e.target.value)}
-                    className="border border-slate-300 bg-white text-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 shadow-sm w-48 md:w-64"
+                    className="border border-slate-300 bg-white text-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs focus:ring-2 focus:ring-blue-500 shadow-sm w-48 md:w-56"
                   />
                </div>
-
                <button
                  onClick={handleMassDelete}
                  disabled={selectedRows.length === 0}
