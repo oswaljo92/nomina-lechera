@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
-import { Plus, Trash2, Save, Search, Loader2, List, FileSpreadsheet, CheckCircle2, AlertCircle, Edit2, X, History, RefreshCcw } from 'lucide-react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { Plus, Trash2, Save, Search, Loader2, List, FileSpreadsheet, CheckCircle2, AlertCircle, Edit2, X, History, RefreshCcw, Upload, Download } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { logAction } from '@/lib/log-utils'
@@ -33,6 +34,11 @@ export default function RecepcionPage() {
   const [selectedSemanaHistorial, setSelectedSemanaHistorial] = useState<string>('')
   const [historialPage, setHistorialPage] = useState(0)
   const [historialPageSize, setHistorialPageSize] = useState(10)
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false)
+  const [importRows, setImportRows] = useState<any[]>([])
+  const [importLoading, setImportLoading] = useState(false)
+  const [importResult, setImportResult] = useState<{ ok: number; errores: string[] } | null>(null)
+  const importRef = useRef<HTMLInputElement>(null)
 
   const [camion, setCamion] = useState<{
     id?: string,
@@ -378,6 +384,161 @@ export default function RecepcionPage() {
     loadHistorial()
   }
 
+  const handleExport = () => {
+    const rows: any[] = []
+    for (const hc of historialCamiones) {
+      for (const d of (hc.recepciones_detalle || [])) {
+        rows.push({
+          'Fecha ingreso': hc.fecha_ingreso ? hc.fecha_ingreso.slice(0, 10) : '',
+          'Codigo Ganadero': d.ganaderos?.codigo_ganadero || '',
+          'Litros Recepcion': d.litros_recepcion ?? 0,
+          'Grasa': d.grasa ?? 0,
+          'Proteina': d.proteina ?? 0,
+          'Acidez': d.acidez ?? 0,
+          'Temperatura': d.temperatura ?? 0,
+          'Crioscopia': d.crioscopia ?? 0,
+          'Reductasa': d.h_reductasa ?? 0,
+          'UFC': d.ufc ?? 0,
+          'Ticket Romana': hc.ticket_romana || '',
+          'Placa': hc.placa || '',
+        })
+      }
+    }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Recepciones')
+    XLSX.writeFile(wb, `recepciones_${selectedFabrica?.codigo || 'fab'}.xlsx`)
+    logAction(supabase, curUser, 'Recepción', 'EXPORTAR', `Exportados ${rows.length} registros.`)
+  }
+
+  const handleDescargarPlantilla = () => {
+    const ejemplo = [{
+      'Fecha ingreso': '2024-01-15',
+      'Codigo Ganadero': 'G001',
+      'Litros Recepcion': 100,
+      'Grasa': 3.5,
+      'Proteina': 3.2,
+      'Acidez': 16,
+      'Temperatura': 4,
+      'Crioscopia': -0.530,
+      'Reductasa': 3,
+      'UFC': 50000,
+      'Ticket Romana': 'T001',
+      'Placa': 'ABC123',
+    }]
+    const ws = XLSX.utils.json_to_sheet(ejemplo)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Plantilla')
+    XLSX.writeFile(wb, 'plantilla_recepciones.xlsx')
+  }
+
+  const handleArchivoImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const data = new Uint8Array(ev.target?.result as ArrayBuffer)
+      const wb = XLSX.read(data, { type: 'array' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: 0, raw: false }) as any[]
+      setImportRows(rows)
+      setImportResult(null)
+      setIsImportModalOpen(true)
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = ''
+  }
+
+  const handleConfirmarImport = async () => {
+    if (!selectedFabricaId || selectedFabricaId === 'all') return
+    setImportLoading(true)
+    const errores: string[] = []
+    let ok = 0
+
+    const parseDate = (val: string) => {
+      const s = String(val).trim()
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(s)) {
+        const [d, m, y] = s.split('/')
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`
+      }
+      if (/^\d{1,2}-\d{1,2}-\d{4}$/.test(s)) {
+        const [d, m, y] = s.split('-')
+        return `${y}-${m.padStart(2,'0')}-${d.padStart(2,'0')}`
+      }
+      return s
+    }
+
+    const grupos = new Map<string, { fecha: string; ticket: string; placa: string; detalles: any[] }>()
+    for (let i = 0; i < importRows.length; i++) {
+      const row = importRows[i]
+      const fila = i + 2
+      const fecha = parseDate(String(row['Fecha ingreso'] || ''))
+      const ticket = String(row['Ticket Romana'] || '').trim()
+      const placa = String(row['Placa'] || '').trim()
+      const codigoGan = String(row['Codigo Ganadero'] || '').trim()
+      if (!fecha) { errores.push(`Fila ${fila}: Falta Fecha ingreso.`); continue }
+      if (!ticket) { errores.push(`Fila ${fila}: Falta Ticket Romana.`); continue }
+      if (!placa) { errores.push(`Fila ${fila}: Falta Placa.`); continue }
+      if (!codigoGan) { errores.push(`Fila ${fila}: Falta Codigo Ganadero.`); continue }
+      const key = `${ticket}|${placa}|${fecha}`
+      if (!grupos.has(key)) grupos.set(key, { fecha, ticket, placa, detalles: [] })
+      grupos.get(key)!.detalles.push({ ...row, _fila: fila })
+    }
+
+    const { data: ganaderosBD } = await supabase.from('ganaderos').select('id, codigo_ganadero, ruta_id').eq('fabrica_id', selectedFabricaId)
+    const ganaderosMap = new Map((ganaderosBD || []).map((g: any) => [String(g.codigo_ganadero).trim(), g]))
+
+    for (const [, grupo] of grupos) {
+      const fechaISO = `${grupo.fecha}T12:00:00`
+      const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).maybeSingle()
+      if (existing) { errores.push(`Ticket "${grupo.ticket}" del ${grupo.fecha} ya existe. Se omite.`); continue }
+
+      const litrosRomana = grupo.detalles.reduce((s: number, d: any) => s + (Number(d['Litros Recepcion']) || 0), 0)
+      const primerGan = ganaderosMap.get(String(grupo.detalles[0]['Codigo Ganadero'] || '').trim())
+
+      const { data: camionIns, error: camionErr } = await supabase.from('recepciones_camion').insert({
+        ticket_romana: grupo.ticket,
+        placa: grupo.placa,
+        fecha_ingreso: fechaISO,
+        litros_romana: litrosRomana,
+        ruta_id: primerGan?.ruta_id || null,
+        fabrica_id: selectedFabricaId,
+      }).select('id').single()
+
+      if (camionErr || !camionIns) { errores.push(`Ticket "${grupo.ticket}": Error al crear — ${camionErr?.message}`); continue }
+
+      for (const d of grupo.detalles) {
+        const cod = String(d['Codigo Ganadero'] || '').trim()
+        const ganObj = ganaderosMap.get(cod)
+        if (!ganObj) { errores.push(`Fila ${d._fila}: Ganadero "${cod}" no encontrado.`); continue }
+        const litrosDet = Number(d['Litros Recepcion']) || 0
+        const { error: detErr } = await supabase.from('recepciones_detalle').insert({
+          recepcion_id: camionIns.id,
+          ganadero_id: ganObj.id,
+          litros_recepcion: litrosDet,
+          grasa: Number(d['Grasa']) || 0,
+          proteina: Number(d['Proteina']) || 0,
+          acidez: Number(d['Acidez']) || 0,
+          temperatura: Number(d['Temperatura']) || 0,
+          crioscopia: Number(d['Crioscopia']) || 0,
+          h_reductasa: Number(d['Reductasa']) || 0,
+          ufc: Number(d['UFC']) || 0,
+          porcentaje_agua_desc: 0,
+          litros_descuento: 0,
+          litros_a_pagar: litrosDet,
+        })
+        if (detErr) errores.push(`Fila ${d._fila}: ${detErr.message}`)
+        else ok++
+      }
+    }
+
+    logAction(supabase, curUser, 'Recepción', 'IMPORTAR_MASIVO', `Importados ${ok} registros. Errores: ${errores.length}`)
+    setImportResult({ ok, errores })
+    setImportLoading(false)
+    if (ok > 0) loadHistorial()
+  }
+
   // Semana ganadera: miércoles a martes
   const getSemanaGanadera = (isoDate: string): string => {
     const p = isoDate.substring(0, 10).split('-')
@@ -522,6 +683,20 @@ export default function RecepcionPage() {
                     <button onClick={() => setIsDeleteModalOpen(true)} className="bg-red-50 text-red-700 font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-red-100 shrink-0">
                       <Trash2 size={16} /> Borrar ({selectedHistorialIds.size})
                     </button>
+                  )}
+                  <button onClick={handleDescargarPlantilla} className="flex items-center gap-2 px-3 py-2 font-bold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl bg-white shadow-sm text-xs shrink-0">
+                    <FileSpreadsheet size={15} /> Plantilla
+                  </button>
+                  <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 font-bold text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded-xl bg-emerald-50 shadow-sm text-xs shrink-0">
+                    <Download size={15} /> Exportar
+                  </button>
+                  {isAdmin && (
+                    <>
+                      <button onClick={() => importRef.current?.click()} disabled={!selectedFabricaId || selectedFabricaId === 'all'} className="flex items-center gap-2 px-3 py-2 font-bold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl bg-blue-50 shadow-sm text-xs shrink-0 disabled:opacity-40">
+                        <Upload size={15} /> Importar
+                      </button>
+                      <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImport} />
+                    </>
                   )}
                   {selectedSemanaHistorial && (
                     <div className="flex gap-3 shrink-0">
@@ -813,6 +988,60 @@ export default function RecepcionPage() {
                </div>
             )}
          </div>
+      )}
+
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto overflow-hidden animate-in zoom-in-95">
+            <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
+              <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Upload size={16} className="text-blue-600" /> Importar Recepciones desde Excel</h3>
+              <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+            </div>
+            <div className="p-4 sm:p-6">
+              {importResult ? (
+                <div className="space-y-4">
+                  <div className="flex gap-4">
+                    <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+                      <CheckCircle2 className="text-emerald-500 mx-auto mb-2" size={32} />
+                      <p className="text-2xl font-black text-emerald-700">{importResult.ok}</p>
+                      <p className="text-xs font-bold text-emerald-600">Detalles importados</p>
+                    </div>
+                    {importResult.errores.length > 0 && (
+                      <div className="flex-1 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
+                        <AlertCircle className="text-red-500 mx-auto mb-2" size={32} />
+                        <p className="text-2xl font-black text-red-700">{importResult.errores.length}</p>
+                        <p className="text-xs font-bold text-red-600">Advertencias</p>
+                      </div>
+                    )}
+                  </div>
+                  {importResult.errores.length > 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-1">
+                      {importResult.errores.map((e, i) => <p key={i} className="text-xs text-red-700 font-semibold">• {e}</p>)}
+                    </div>
+                  )}
+                  <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Cerrar</button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 space-y-1">
+                    <p className="font-black">Formato esperado de columnas:</p>
+                    <p className="font-semibold">Fecha ingreso · Codigo Ganadero · Litros Recepcion · Grasa · Proteina · Acidez · Temperatura · Crioscopia · Reductasa · UFC · Ticket Romana · Placa</p>
+                    <p className="text-blue-600 mt-1">Fecha en formato YYYY-MM-DD. Los campos numéricos vacíos se toman como 0. Descarga la plantilla para ver el formato exacto.</p>
+                  </div>
+                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-semibold">
+                    Se importarán {importRows.length} filas. Los tickets que ya existen en la misma fecha serán omitidos.
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cancelar</button>
+                    <button onClick={handleConfirmarImport} disabled={importLoading} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">
+                      {importLoading ? <><Loader2 size={16} className="animate-spin" /> Importando...</> : <><Upload size={16} /> Confirmar Importación</>}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {isDeleteModalOpen && (

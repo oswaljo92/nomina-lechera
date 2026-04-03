@@ -369,9 +369,11 @@ export default function RutasPage() {
               {pagedRutas.map((ruta) => (
                 <tr key={ruta.id} className="hover:bg-slate-50 transition-colors align-middle">
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} /></td>}
-                  <td className="px-4 py-3 whitespace-nowrap flex gap-3 items-center">
-                    <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
-                    {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
+                  <td className="px-4 py-3 align-middle">
+                    <div className="flex gap-3 items-center justify-center">
+                      <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
+                      {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
+                    </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{ruta.codigo_ruta}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-bold text-slate-800">{ruta.nombre_ruta}</td>
