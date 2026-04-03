@@ -754,10 +754,10 @@ export default function RecepcionPage() {
                             onClick={() => setSemanaDropdownOpen(o => !o)}
                             className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-xl transition-colors select-none"
                           >
-                            <span className="text-[10px] font-black uppercase opacity-75">Sem</span>
+                            <span className="text-[10px] font-black uppercase">Sem</span>
                             <span className="text-lg font-black leading-none">{getNumeroSemana(selectedSemanaHistorial)}</span>
-                            <span className="text-xs font-bold opacity-90">{formatSemanaLabel(selectedSemanaHistorial)}</span>
-                            <svg className={`w-3 h-3 opacity-75 ml-1 transition-transform duration-200 ${semanaDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                            <span className="text-xs font-bold">{formatSemanaLabel(selectedSemanaHistorial)}</span>
+                            <svg className={`w-3 h-3 ml-1 transition-transform duration-200 ${semanaDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
                           </button>
 
                           {semanaDropdownOpen && (
@@ -783,7 +783,7 @@ export default function RecepcionPage() {
                                         <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
                                           Semana {getNumeroSemana(sem)}
                                         </div>
-                                        <div className="text-[10px] text-gray-400 mt-0.5">{formatSemanaLabel(sem)}</div>
+                                        <div className="text-[10px] text-gray-700 mt-0.5">{formatSemanaLabel(sem)}</div>
                                       </div>
                                       {isSelected && <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
                                     </button>

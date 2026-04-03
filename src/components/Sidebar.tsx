@@ -121,7 +121,7 @@ export default function Sidebar({
                     <div className={`text-xs font-bold leading-tight ${selectedFabricaId === 'all' ? 'text-blue-700' : 'text-gray-900'}`}>
                       Todas las fábricas
                     </div>
-                    <div className="text-[10px] text-gray-400 mt-0.5">
+                    <div className="text-[10px] text-gray-700 mt-0.5">
                       Sumatoria total
                     </div>
                   </div>
@@ -149,7 +149,7 @@ export default function Sidebar({
                         <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
                           {f.nombre}
                         </div>
-                        <div className="text-[10px] text-gray-400 mt-0.5">
+                        <div className="text-[10px] text-gray-700 mt-0.5">
                           Cód. {f.codigo}
                         </div>
                       </div>
