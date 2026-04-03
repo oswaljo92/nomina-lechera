@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import {
   Plus, Search, FileText, Image as ImageIcon, Trash2, Edit2, Eye,
-  Loader2, Download, FileArchive, X, CheckCircle2, History,
+  Loader2, Download, FileArchive, X, CheckCircle2, History, AlertCircle,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useFabrica } from '@/contexts/FabricaContext'
@@ -59,6 +59,8 @@ export default function FacturacionPage() {
   const [viewFactura, setViewFactura] = useState<Factura | null>(null)
   const [viewDeducciones, setViewDeducciones] = useState<FacturaDeduccion[]>([])
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Factura | null>(null)
+  const [isDeleteBulkOpen, setIsDeleteBulkOpen] = useState(false)
 
   // Exportación
   const [exporting, setExporting] = useState(false)
@@ -144,18 +146,27 @@ export default function FacturacionPage() {
   }
 
   // ── Eliminar ───────────────────────────────────────────────────────────────
-  const handleDelete = async (factura: Factura) => {
-    if (!confirm(`¿Eliminar la factura de ${factura.tercero_nombre} (${factura.semana_nombre})?`)) return
-    await supabase.from('facturas').delete().eq('id', factura.id)
-    logAction(supabase, curUser, 'Facturación', 'BORRAR', `Eliminada factura: ${factura.tercero_nombre} — ${factura.semana_nombre}`)
+  const handleDelete = (factura: Factura) => {
+    setDeleteTarget(factura)
+  }
+
+  const confirmDeleteSingle = async () => {
+    if (!deleteTarget) return
+    await supabase.from('facturas').delete().eq('id', deleteTarget.id)
+    logAction(supabase, curUser, 'Facturación', 'BORRAR', `Eliminada factura: ${deleteTarget.tercero_nombre} — ${deleteTarget.semana_nombre}`)
+    setDeleteTarget(null)
     load()
   }
 
-  const handleDeleteSelected = async () => {
-    if (!confirm(`¿Eliminar ${selectedIds.size} factura(s) seleccionadas?`)) return
+  const handleDeleteSelected = () => {
+    setIsDeleteBulkOpen(true)
+  }
+
+  const confirmDeleteBulk = async () => {
     await supabase.from('facturas').delete().in('id', Array.from(selectedIds))
     logAction(supabase, curUser, 'Facturación', 'BORRADO_MASIVO', `Eliminadas ${selectedIds.size} facturas`)
     setSelectedIds(new Set())
+    setIsDeleteBulkOpen(false)
     load()
   }
 
@@ -573,6 +584,38 @@ export default function FacturacionPage() {
         moduleFilter="Facturación"
         title="Bitácora — Facturación"
       />
+
+      {/* ── Modal: Confirmar eliminación individual ──────────────────────── */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-6 text-center max-w-sm w-full animate-in zoom-in-95">
+            <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+            <h3 className="font-black text-lg text-slate-800">¿Eliminar factura?</h3>
+            <p className="text-slate-500 text-sm mb-6 mt-2">
+              Se borrará permanentemente la factura de <span className="font-bold text-slate-700">{deleteTarget.tercero_nombre}</span> ({deleteTarget.semana_nombre}).
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setDeleteTarget(null)} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cerrar</button>
+              <button onClick={confirmDeleteSingle} className="bg-red-600 text-white font-bold py-3 rounded-xl">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Confirmar eliminación masiva ──────────────────────────── */}
+      {isDeleteBulkOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-2xl p-6 text-center max-w-sm w-full animate-in zoom-in-95">
+            <AlertCircle size={48} className="text-red-500 mx-auto mb-4" />
+            <h3 className="font-black text-lg text-slate-800">¿Eliminar registros?</h3>
+            <p className="text-slate-500 text-sm mb-6 mt-2">Esta acción borrará permanentemente {selectedIds.size} factura(s).</p>
+            <div className="grid grid-cols-2 gap-3">
+              <button onClick={() => setIsDeleteBulkOpen(false)} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cerrar</button>
+              <button onClick={confirmDeleteBulk} className="bg-red-600 text-white font-bold py-3 rounded-xl">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Contenedor oculto para exportación bulk ──────────────────────── */}
       {bulkExportFactura && (
