@@ -1512,11 +1512,13 @@ CREATE TABLE precios_semanales (
                   />
                </div>
 
-               {selectedRows.length > 0 && (
-                 <button onClick={handleMassDelete} className="flex shrink-0 items-center gap-2 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm animate-in zoom-in-95">
-                   <Trash2 size={14}/> Eliminar ({selectedRows.length})
-                 </button>
-               )}
+               <button
+                 onClick={handleMassDelete}
+                 disabled={selectedRows.length === 0}
+                 className={`flex shrink-0 items-center gap-2 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm ${selectedRows.length === 0 ? 'invisible' : ''}`}
+               >
+                 <Trash2 size={14}/> Eliminar ({selectedRows.length})
+               </button>
                <button onClick={() => setIsAdding(true)} disabled={!!dbError} className="flex shrink-0 items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 px-4 py-1.5 rounded-lg text-xs font-bold transition-colors shadow-sm disabled:opacity-50">
                  <Plus size={14}/> Nuevo Grupo
                </button>
