@@ -606,12 +606,12 @@ export default function RecepcionPage() {
   const getNumeroSemana = (wedStr: string): number => {
     const p = wedStr.split('-')
     const wed = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))
-    // Primera semana ganadera del año = semana que contiene el primer miércoles de enero
-    const firstWedOfYear = new Date(wed.getFullYear(), 0, 1)
-    const dayOfWeek = firstWedOfYear.getDay()
-    const daysToWed = (3 - dayOfWeek + 7) % 7
-    firstWedOfYear.setDate(firstWedOfYear.getDate() + daysToWed)
-    const diff = wed.getTime() - firstWedOfYear.getTime()
+    // Semana 1 = el miércoles anterior o igual al 1 de enero (puede caer en dic del año anterior)
+    const jan1 = new Date(wed.getFullYear(), 0, 1)
+    const daysBack = (jan1.getDay() - 3 + 7) % 7
+    const firstWed = new Date(jan1)
+    firstWed.setDate(jan1.getDate() - daysBack)
+    const diff = wed.getTime() - firstWed.getTime()
     const weekNum = Math.round(diff / (7 * 24 * 60 * 60 * 1000)) + 1
     return weekNum > 0 ? weekNum : 1
   }
