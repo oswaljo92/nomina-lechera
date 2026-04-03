@@ -2077,7 +2077,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
   }, [])
 
   const tabsItems = [
-    { id: 'usuarios', label: 'Gestión de Usuarios', shortLabel: 'Usuarios', icon: Users },
+    { id: 'usuarios', label: 'Usuarios', shortLabel: 'Usuarios', icon: Users },
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
@@ -2104,7 +2104,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
                  tab === item.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
                }`}
              >
-               <Icon size={14} />
+               <Icon size={18} />
                <span className="sm:hidden">{(item as any).shortLabel}</span>
                <span className="hidden sm:inline">{item.label}</span>
              </button>
