@@ -1002,7 +1002,7 @@ function MultiSelectGanaderos({ options, selected, onChange, disabled }: any) {
   )
 }
 
-function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio, onSelect, isSelected }: any) {
+function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio, onSelect, isSelected, onCancel }: any) {
   const [isEditing, setIsEditing] = useState(!p.id)
   const [lecheUSD, setLecheUSD] = useState(p.precio_leche_usd || 0)
   const [fleteUSD, setFleteUSD] = useState(p.precio_flete_usd || 0)
@@ -1010,6 +1010,7 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
   const [ganaderosStr, setGanaderosStr] = useState<string[]>(p.ganaderos || [])
 
   const handleCancel = () => {
+    if (!p.id && onCancel) { onCancel(); return }
     setLecheUSD(p.precio_leche_usd || 0)
     setFleteUSD(p.precio_flete_usd || 0)
     setGrupoNombre(p.grupo || '')
@@ -1087,7 +1088,7 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
          {isEditing ? (
            <>
              <button onClick={handleSave} className="bg-blue-600 text-white px-2 py-1.5 rounded shadow-sm hover:bg-blue-700 transition-colors"><Save size={16}/></button>
-             {p.id && <button onClick={handleCancel} className="bg-slate-100 text-slate-600 px-2 py-1.5 rounded hover:bg-slate-200 transition-colors" title="Cancelar"><X size={16}/></button>}
+             <button onClick={handleCancel} className="bg-slate-100 text-red-500 px-2 py-1.5 rounded hover:bg-red-100 transition-colors" title="Cancelar"><X size={16}/></button>
            </>
          ) : (
            <button onClick={() => setIsEditing(true)} className="bg-slate-200 text-slate-700 px-2 py-1.5 rounded hover:bg-slate-300 transition-colors"><Edit2 size={16}/></button>
@@ -1467,7 +1468,7 @@ CREATE TABLE precios_semanales (
                   </thead>
                   <tbody className="bg-white">
                      {isAdding && (
-                        <PreciosRow p={{}} tasaBase={tasaBase} ganaderosList={ganaderosList} actualizarPrecio={actualizarPrecio} borrarPrecio={borrarPrecio} isSelected={false} onSelect={()=>{}} />
+                        <PreciosRow p={{}} tasaBase={tasaBase} ganaderosList={ganaderosList} actualizarPrecio={actualizarPrecio} borrarPrecio={borrarPrecio} isSelected={false} onSelect={()=>{}} onCancel={() => setIsAdding(false)} />
                      )}
                      {precios
                         .filter(p => {
