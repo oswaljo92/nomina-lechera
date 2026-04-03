@@ -794,8 +794,10 @@ export default function RecepcionPage() {
                         <th className="px-6 py-3 w-10 text-center"><input type="checkbox" checked={selectedHistorialIds.size === filteredCamiones.length && filteredCamiones.length > 0} onChange={toggleAll} /></th>
                         <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Acciones</th>
                         <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Fecha & Camión</th>
+                        <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ruta</th>
                         <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500">Prov.</th>
-                        <th className="px-6 py-3 text-left text-[10px] font-black uppercase text-slate-500 text-right">Litros Totales</th>
+                        <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-slate-500">Litros Totales</th>
+                        <th className="px-6 py-3 text-right text-[10px] font-black uppercase text-emerald-600">Litros a Pagar</th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-slate-100">
@@ -810,10 +812,21 @@ export default function RecepcionPage() {
                                <div className="font-extrabold text-blue-800">{formatearFecha(hc.fecha_ingreso)}</div>
                                <div className="font-bold text-slate-700">{hc.ticket_romana} ({hc.placa})</div>
                             </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-xs">
+                              {hc.rutas ? (
+                                <div>
+                                  <span className="font-black text-indigo-700">{hc.rutas.codigo_ruta}</span>
+                                  <div className="text-slate-500 font-semibold">{hc.rutas.nombre_ruta}</div>
+                                </div>
+                              ) : <span className="text-slate-300">—</span>}
+                            </td>
                             <td className="px-6 py-4 text-xs font-bold text-slate-500 truncate max-w-[150px]">
                               {hc.recepciones_detalle?.map((d:any) => d.ganaderos?.codigo_ganadero).join(', ')}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-slate-800 text-right">{hc.litros_romana?.toLocaleString('es-VE')} L</td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm font-black text-emerald-700 text-right">
+                              {hc.recepciones_detalle?.reduce((s: number, d: any) => s + (Number(d.litros_a_pagar) || 0), 0).toLocaleString('es-VE', { maximumFractionDigits: 0 })} L
+                            </td>
                          </tr>
                       ))}
                     </tbody>
