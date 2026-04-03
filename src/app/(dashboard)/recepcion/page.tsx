@@ -603,6 +603,19 @@ export default function RecepcionPage() {
     return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
   }
 
+  const getNumeroSemana = (wedStr: string): number => {
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))
+    // Primera semana ganadera del año = semana que contiene el primer miércoles de enero
+    const firstWedOfYear = new Date(wed.getFullYear(), 0, 1)
+    const dayOfWeek = firstWedOfYear.getDay()
+    const daysToWed = (3 - dayOfWeek + 7) % 7
+    firstWedOfYear.setDate(firstWedOfYear.getDate() + daysToWed)
+    const diff = wed.getTime() - firstWedOfYear.getTime()
+    const weekNum = Math.round(diff / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNum > 0 ? weekNum : 1
+  }
+
   const semanasDisponibles = useMemo(() => {
     const weeks = new Set<string>()
     historialCamiones.forEach(hc => { if (hc.fecha_ingreso) weeks.add(getSemanaGanadera(hc.fecha_ingreso)) })
@@ -705,19 +718,50 @@ export default function RecepcionPage() {
          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden animate-in fade-in">
             <div className="bg-slate-50 p-4 border-b border-slate-200 flex flex-col gap-3">
                {/* Selector de semana ganadera */}
-               <div className="flex gap-2 items-center flex-wrap">
+               <div className="flex items-center gap-2">
                   <span className="text-[10px] font-black text-slate-500 uppercase shrink-0">Semana:</span>
                   {semanasDisponibles.length === 0 ? (
                     <span className="text-xs text-slate-400">Sin registros</span>
-                  ) : semanasDisponibles.map(sem => (
-                    <button
-                      key={sem}
-                      onClick={() => { setSelectedSemanaHistorial(sem); setFiltroHistorial('') }}
-                      className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${selectedSemanaHistorial === sem ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
-                    >
-                      {formatSemanaLabel(sem)}
-                    </button>
-                  ))}
+                  ) : (() => {
+                    const idx = semanasDisponibles.indexOf(selectedSemanaHistorial)
+                    const hasPrev = idx < semanasDisponibles.length - 1
+                    const hasNext = idx > 0
+                    return (
+                      <div className="flex items-center gap-1">
+                        <button
+                          disabled={!hasPrev}
+                          onClick={() => { setSelectedSemanaHistorial(semanasDisponibles[idx + 1]); setFiltroHistorial('') }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-200 text-slate-600 font-black hover:bg-blue-100 hover:text-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
+                        >‹</button>
+
+                        <div className="relative">
+                          <select
+                            value={selectedSemanaHistorial}
+                            onChange={e => { setSelectedSemanaHistorial(e.target.value); setFiltroHistorial('') }}
+                            className="appearance-none absolute inset-0 opacity-0 cursor-pointer w-full"
+                          >
+                            {semanasDisponibles.map(sem => (
+                              <option key={sem} value={sem}>Sem {getNumeroSemana(sem)} — {formatSemanaLabel(sem)}</option>
+                            ))}
+                          </select>
+                          <div className="flex items-center gap-2 bg-blue-600 text-white px-4 py-1.5 rounded-xl cursor-pointer select-none">
+                            <span className="text-[10px] font-black uppercase opacity-75">Sem</span>
+                            <span className="text-lg font-black leading-none">{getNumeroSemana(selectedSemanaHistorial)}</span>
+                            <span className="text-xs font-bold opacity-90">{formatSemanaLabel(selectedSemanaHistorial)}</span>
+                            <svg className="w-3 h-3 opacity-75 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                          </div>
+                        </div>
+
+                        <button
+                          disabled={!hasNext}
+                          onClick={() => { setSelectedSemanaHistorial(semanasDisponibles[idx - 1]); setFiltroHistorial('') }}
+                          className="w-8 h-8 flex items-center justify-center rounded-lg bg-slate-200 text-slate-600 font-black hover:bg-blue-100 hover:text-blue-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors text-sm"
+                        >›</button>
+
+                        <span className="text-[10px] text-slate-400 font-bold ml-1">{semanasDisponibles.length} semanas</span>
+                      </div>
+                    )
+                  })()}
                </div>
                {/* Barra de búsqueda + totales */}
                <div className="flex flex-col sm:flex-row gap-3 items-center">
