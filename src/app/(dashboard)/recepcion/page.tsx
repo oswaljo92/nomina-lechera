@@ -469,23 +469,7 @@ export default function RecepcionPage() {
       return s
     }
 
-    const grupos = new Map<string, { fecha: string; ticket: string; placa: string; detalles: any[] }>()
-    for (let i = 0; i < importRows.length; i++) {
-      const row = importRows[i]
-      const fila = i + 2
-      const fecha = parseDate(String(row['Fecha ingreso'] || ''))
-      const ticket = String(row['Ticket Romana'] || '').trim()
-      const placa = String(row['Placa'] || '').trim()
-      const codigoGan = String(row['Codigo Ganadero'] || '').trim()
-      if (!fecha) { errores.push(`Fila ${fila}: Falta Fecha ingreso.`); continue }
-      if (!ticket) { errores.push(`Fila ${fila}: Falta Ticket Romana.`); continue }
-      if (!placa) { errores.push(`Fila ${fila}: Falta Placa.`); continue }
-      if (!codigoGan) { errores.push(`Fila ${fila}: Falta Codigo Ganadero.`); continue }
-      const key = `${ticket}|${placa}|${fecha}`
-      if (!grupos.has(key)) grupos.set(key, { fecha, ticket, placa, detalles: [] })
-      grupos.get(key)!.detalles.push({ ...row, _fila: fila })
-    }
-
+    // Cargar ganaderos y crioscopia ANTES de agrupar para conocer la ruta de cada ganadero
     const { data: ganaderosBD } = await supabase.from('ganaderos').select('id, codigo_ganadero, ruta_id').eq('fabrica_id', selectedFabricaId)
     const ganaderosMap = new Map((ganaderosBD || []).map((g: any) => [String(g.codigo_ganadero).trim(), g]))
 
@@ -498,20 +482,41 @@ export default function RecepcionPage() {
       , criosTable[0])
     }
 
+    // Agrupar por ticket+placa+fecha+ruta para crear un registro de camión por cada ruta
+    const grupos = new Map<string, { fecha: string; ticket: string; placa: string; ruta_id: string | null; detalles: any[] }>()
+    for (let i = 0; i < importRows.length; i++) {
+      const row = importRows[i]
+      const fila = i + 2
+      const fecha = parseDate(String(row['Fecha ingreso'] || ''))
+      const ticket = String(row['Ticket Romana'] || '').trim()
+      const placa = String(row['Placa'] || '').trim()
+      const codigoGan = String(row['Codigo Ganadero'] || '').trim()
+      if (!fecha) { errores.push(`Fila ${fila}: Falta Fecha ingreso.`); continue }
+      if (!ticket) { errores.push(`Fila ${fila}: Falta Ticket Romana.`); continue }
+      if (!placa) { errores.push(`Fila ${fila}: Falta Placa.`); continue }
+      if (!codigoGan) { errores.push(`Fila ${fila}: Falta Codigo Ganadero.`); continue }
+      const ganObj = ganaderosMap.get(codigoGan)
+      if (!ganObj) { errores.push(`Fila ${fila}: Ganadero "${codigoGan}" no encontrado.`); continue }
+      const ruta_id = ganObj.ruta_id || null
+      const key = `${ticket}|${placa}|${fecha}|${ruta_id}`
+      if (!grupos.has(key)) grupos.set(key, { fecha, ticket, placa, ruta_id, detalles: [] })
+      grupos.get(key)!.detalles.push({ ...row, _fila: fila })
+    }
+
     for (const [, grupo] of grupos) {
       const fechaISO = `${grupo.fecha}T12:00:00`
-      const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).maybeSingle()
-      if (existing) { errores.push(`Ticket "${grupo.ticket}" del ${grupo.fecha} ya existe. Se omite.`); continue }
+      // Verificar duplicado incluyendo ruta para permitir el mismo ticket en rutas distintas
+      const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).eq('ruta_id', grupo.ruta_id ?? '').maybeSingle()
+      if (existing) { errores.push(`Ticket "${grupo.ticket}" ruta "${grupo.ruta_id}" del ${grupo.fecha} ya existe. Se omite.`); continue }
 
       const litrosRomana = grupo.detalles.reduce((s: number, d: any) => s + (Number(d['Litros Recepcion']) || 0), 0)
-      const primerGan = ganaderosMap.get(String(grupo.detalles[0]['Codigo Ganadero'] || '').trim())
 
       const { data: camionIns, error: camionErr } = await supabase.from('recepciones_camion').insert({
         ticket_romana: grupo.ticket,
         placa: grupo.placa,
         fecha_ingreso: fechaISO,
         litros_romana: litrosRomana,
-        ruta_id: primerGan?.ruta_id || null,
+        ruta_id: grupo.ruta_id,
         fabrica_id: selectedFabricaId,
       }).select('id').single()
 
