@@ -413,7 +413,7 @@ export default function RecepcionPage() {
 
   const handleDescargarPlantilla = () => {
     const ejemplo = [{
-      'Fecha ingreso': '2024-01-15',
+      'Fecha ingreso': '15-01-2024',
       'Codigo Ganadero': 'G001',
       'Litros Recepcion': 100,
       'Grasa': 3.5,
@@ -1026,11 +1026,37 @@ export default function RecepcionPage() {
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-xs text-blue-800 space-y-1">
                     <p className="font-black">Formato esperado de columnas:</p>
                     <p className="font-semibold">Fecha ingreso · Codigo Ganadero · Litros Recepcion · Grasa · Proteina · Acidez · Temperatura · Crioscopia · Reductasa · UFC · Ticket Romana · Placa</p>
-                    <p className="text-blue-600 mt-1">Fecha en formato YYYY-MM-DD. Los campos numéricos vacíos se toman como 0. Descarga la plantilla para ver el formato exacto.</p>
+                    <p className="text-blue-600 mt-1">Fecha acepta DD-MM-YYYY o YYYY-MM-DD (se convierte automáticamente). Los campos numéricos vacíos se toman como 0. Descarga la plantilla para ver el formato exacto.</p>
                   </div>
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800 font-semibold">
-                    Se importarán {importRows.length} filas. Los tickets que ya existen en la misma fecha serán omitidos.
+                    Se encontraron <span className="font-black">{importRows.length} filas</span> en el archivo. Los tickets que ya existen en la misma fecha serán omitidos.
                   </div>
+                  {importRows.length > 0 && (
+                    <div className="overflow-x-auto max-h-56 border border-slate-200 rounded-xl">
+                      <table className="w-full text-[11px]">
+                        <thead className="bg-slate-50 sticky top-0">
+                          <tr>
+                            <th className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">#</th>
+                            {Object.keys(importRows[0]).map(col => (
+                              <th key={col} className="px-3 py-2 text-left font-black text-slate-500 whitespace-nowrap">{col}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {importRows.map((row, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-bold text-slate-400">{i + 2}</td>
+                              {Object.keys(importRows[0]).map(col => (
+                                <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">
+                                  {String(row[col] ?? '')}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   <div className="flex gap-3">
                     <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="flex-1 bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cancelar</button>
                     <button onClick={handleConfirmarImport} disabled={importLoading} className="flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50">
