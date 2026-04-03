@@ -1141,7 +1141,7 @@ export default function RecepcionPage() {
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden animate-in zoom-in-95">
             <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
               <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Upload size={16} className="text-blue-600" /> Importar Recepciones desde Excel</h3>
-              <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="p-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20} /></button>
+              <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
             </div>
             <div className="p-4 sm:p-6">
               {importResult ? (

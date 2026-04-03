@@ -1105,8 +1105,10 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
   const supabase = createClient()
   const tableRef = useRef<HTMLDivElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
+  const semanaDropdownRef = useRef<HTMLDivElement>(null)
   const [semanas, setSemanas] = useState<any[]>([])
   const [selectedSemana, setSelectedSemana] = useState('')
+  const [semanaDropdownOpen, setSemanaDropdownOpen] = useState(false)
   const [tasaBase, setTasaBase] = useState(0)
 
   const [precios, setPrecios] = useState<any[]>([])
@@ -1183,6 +1185,42 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         fetchPrefs()
      }
   }, [selectedSemana, semanas])
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (semanaDropdownRef.current && !semanaDropdownRef.current.contains(e.target as Node)) {
+        setSemanaDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const getSemanaGanadera = (isoDate: string): string => {
+    const p = isoDate.substring(0, 10).split('-')
+    const d = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+    const daysSinceWed = (d.getDay() - 3 + 7) % 7
+    const wed = new Date(d); wed.setDate(d.getDate() - daysSinceWed)
+    return `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+  }
+
+  const formatSemanaLabel = (wedStr: string): string => {
+    const fmt = (dt: Date) => `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+
+  const getNumeroSemana = (wedStr: string): number => {
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]))
+    const jan1 = new Date(wed.getFullYear(), 0, 1)
+    const daysBack = (jan1.getDay() - 3 + 7) % 7
+    const firstWed = new Date(jan1); firstWed.setDate(jan1.getDate() - daysBack)
+    const weekNum = Math.round((wed.getTime() - firstWed.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNum > 0 ? weekNum : 1
+  }
 
   const actualizarPrecio = async (id: string, payload: any) => {
       if (!id) {
@@ -1363,10 +1401,55 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Semana de Apertura</label>
-              <select value={selectedSemana} onChange={e=>setSelectedSemana(e.target.value)} className="w-full bg-slate-50 border border-slate-300 text-slate-700 font-bold rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500">
-                 {semanas.map(s => <option key={s.fecha} value={s.fecha}>Miércoles {formatDate(s.fecha)}</option>)}
-                 {semanas.length === 0 && <option value="">Sin semanas mapeadas</option>}
-              </select>
+              <div className="relative" ref={semanaDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setSemanaDropdownOpen(o => !o)}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-xl transition-colors select-none"
+                >
+                  {selectedSemana ? (
+                    <>
+                      <span className="text-[10px] font-black uppercase">Sem</span>
+                      <span className="text-lg font-black leading-none">{getNumeroSemana(selectedSemana)}</span>
+                      <span className="text-xs font-bold">{formatSemanaLabel(selectedSemana)}</span>
+                    </>
+                  ) : (
+                    <span className="text-xs font-bold">Sin semanas mapeadas</span>
+                  )}
+                  <svg className={`w-3 h-3 ml-1 transition-transform duration-200 ${semanaDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+                {semanaDropdownOpen && semanas.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden" style={{ zIndex: 9999, minWidth: '280px' }}>
+                    <div className="max-h-72 overflow-y-auto">
+                      {semanas.map(s => {
+                        const isSelected = s.fecha === selectedSemana
+                        return (
+                          <button
+                            key={s.fecha}
+                            type="button"
+                            onMouseDown={e => {
+                              e.preventDefault()
+                              setSelectedSemana(s.fecha)
+                              setSemanaDropdownOpen(false)
+                            }}
+                            className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${
+                              isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="min-w-0">
+                              <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
+                                Semana {getNumeroSemana(s.fecha)}
+                              </div>
+                              <div className="text-[10px] text-gray-700 mt-0.5">{formatSemanaLabel(s.fecha)}</div>
+                            </div>
+                            {isSelected && <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
            </div>
            <div>
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tasa BCV Referencial</label>
