@@ -489,6 +489,15 @@ export default function RecepcionPage() {
     const { data: ganaderosBD } = await supabase.from('ganaderos').select('id, codigo_ganadero, ruta_id').eq('fabrica_id', selectedFabricaId)
     const ganaderosMap = new Map((ganaderosBD || []).map((g: any) => [String(g.codigo_ganadero).trim(), g]))
 
+    const { data: criosBD } = await supabase.from('tabla_crioscopia').select('punto_crioscopico, porcentaje_agua').order('punto_crioscopico', { ascending: false })
+    const criosTable = criosBD || []
+    const nearestCrio = (val: number) => {
+      if (criosTable.length === 0) return { punto_crioscopico: val, porcentaje_agua: 0 }
+      return criosTable.reduce((prev: any, curr: any) =>
+        Math.abs(curr.punto_crioscopico - val) < Math.abs(prev.punto_crioscopico - val) ? curr : prev
+      , criosTable[0])
+    }
+
     for (const [, grupo] of grupos) {
       const fechaISO = `${grupo.fecha}T12:00:00`
       const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).maybeSingle()
@@ -513,6 +522,8 @@ export default function RecepcionPage() {
         const ganObj = ganaderosMap.get(cod)
         if (!ganObj) { errores.push(`Fila ${d._fila}: Ganadero "${cod}" no encontrado.`); continue }
         const litrosDet = Number(d['Litros Recepcion']) || 0
+        const crioVal = Number(d['Crioscopia']) || 0
+        const crioMatch = nearestCrio(crioVal)
         const { error: detErr } = await supabase.from('recepciones_detalle').insert({
           recepcion_id: camionIns.id,
           ganadero_id: ganObj.id,
@@ -521,10 +532,10 @@ export default function RecepcionPage() {
           proteina: Number(d['Proteina']) || 0,
           acidez: Number(d['Acidez']) || 0,
           temperatura: Number(d['Temperatura']) || 0,
-          crioscopia: Number(d['Crioscopia']) || 0,
+          crioscopia: crioMatch.punto_crioscopico,
           h_reductasa: Number(d['Reductasa']) || 0,
           ufc: Number(d['UFC']) || 0,
-          porcentaje_agua_desc: 0,
+          porcentaje_agua_desc: crioMatch.porcentaje_agua || 0,
           litros_descuento: 0,
           litros_a_pagar: litrosDet,
         })
