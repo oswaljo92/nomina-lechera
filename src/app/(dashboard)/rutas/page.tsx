@@ -367,9 +367,9 @@ export default function RutasPage() {
             </thead>
             <tbody className="bg-white divide-y divide-slate-100">
               {pagedRutas.map((ruta) => (
-                <tr key={ruta.id} className="hover:bg-slate-50 transition-colors">
+                <tr key={ruta.id} className="hover:bg-slate-50 transition-colors align-middle">
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} /></td>}
-                  <td className="px-4 py-3 whitespace-nowrap flex gap-3">
+                  <td className="px-4 py-3 whitespace-nowrap flex gap-3 items-center">
                     <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
                     {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                   </td>
