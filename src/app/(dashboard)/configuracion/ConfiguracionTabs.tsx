@@ -1802,9 +1802,9 @@ function FabricasTab({ user }: { user: any }) {
           onClick={e => { if (e.target === e.currentTarget) setEditFabrica(null) }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 rounded-t-2xl">
-              <h3 className="font-black text-slate-800">Editar Fábrica — {editFabrica.nombre}</h3>
-              <button onClick={() => setEditFabrica(null)} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg"><X size={18} /></button>
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 rounded-t-2xl overflow-hidden">
+              <h3 className="font-black text-slate-800 px-6 py-4">Editar Fábrica — {editFabrica.nombre}</h3>
+              <button onClick={() => setEditFabrica(null)} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors self-stretch flex items-center"><X size={18} /></button>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div>
@@ -2000,9 +2000,9 @@ function FacturacionConfigTab({ user }: { user: any }) {
           onClick={e => { if (e.target === e.currentTarget) setIsModalOpen(false) }}
         >
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm">
-            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 px-6 py-4 rounded-t-2xl">
-              <h3 className="font-black text-slate-800">{editDed.id ? 'Editar' : 'Nueva'} Deducción</h3>
-              <button onClick={() => setIsModalOpen(false)} className="p-2 text-slate-400 hover:text-slate-700 rounded-lg"><X size={18} /></button>
+            <div className="flex justify-between items-center bg-slate-100 border-b border-slate-200 rounded-t-2xl overflow-hidden">
+              <h3 className="font-black text-slate-800 px-6 py-4">{editDed.id ? 'Editar' : 'Nueva'} Deducción</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-500 hover:text-white hover:bg-red-500 px-5 py-4 transition-colors self-stretch flex items-center"><X size={18} /></button>
             </div>
             <form onSubmit={handleSave} className="p-6 space-y-4">
               <div>
