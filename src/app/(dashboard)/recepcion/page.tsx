@@ -37,7 +37,7 @@ export default function RecepcionPage() {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
   const [importRows, setImportRows] = useState<any[]>([])
   const [importLoading, setImportLoading] = useState(false)
-  const [importResult, setImportResult] = useState<{ ok: number; errores: string[] } | null>(null)
+  const [importResult, setImportResult] = useState<{ ok: number; errores: string[]; exitosos: any[]; fallidos: Array<{fila: number; datos: any; motivo: string}> } | null>(null)
   const importRef = useRef<HTMLInputElement>(null)
 
   const [camion, setCamion] = useState<{
@@ -468,6 +468,8 @@ export default function RecepcionPage() {
     if (!selectedFabricaId || selectedFabricaId === 'all') return
     setImportLoading(true)
     const errores: string[] = []
+    const exitosos: any[] = []
+    const fallidos: Array<{fila: number; datos: any; motivo: string}> = []
     let ok = 0
 
     const parseDate = (val: string) => {
@@ -506,12 +508,12 @@ export default function RecepcionPage() {
       const ticket = String(row['Ticket Romana'] || '').trim()
       const placa = String(row['Placa'] || '').trim()
       const codigoGan = String(row['Codigo Ganadero'] || '').trim()
-      if (!fecha) { errores.push(`Fila ${fila}: Falta Fecha ingreso.`); continue }
-      if (!ticket) { errores.push(`Fila ${fila}: Falta Ticket Romana.`); continue }
-      if (!placa) { errores.push(`Fila ${fila}: Falta Placa.`); continue }
-      if (!codigoGan) { errores.push(`Fila ${fila}: Falta Codigo Ganadero.`); continue }
+      if (!fecha) { const m = 'Falta Fecha ingreso'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
+      if (!ticket) { const m = 'Falta Ticket Romana'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
+      if (!placa) { const m = 'Falta Placa'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
+      if (!codigoGan) { const m = 'Falta Codigo Ganadero'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       const ganObj = ganaderosMap.get(codigoGan)
-      if (!ganObj) { errores.push(`Fila ${fila}: Ganadero "${codigoGan}" no encontrado.`); continue }
+      if (!ganObj) { const m = `Ganadero "${codigoGan}" no encontrado`; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       const ruta_id = ganObj.ruta_id || null
       const key = `${ticket}|${placa}|${fecha}|${ruta_id}`
       if (!grupos.has(key)) grupos.set(key, { fecha, ticket, placa, ruta_id, detalles: [] })
@@ -522,7 +524,12 @@ export default function RecepcionPage() {
       const fechaISO = `${grupo.fecha}T12:00:00`
       // Verificar duplicado incluyendo ruta para permitir el mismo ticket en rutas distintas
       const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).eq('ruta_id', grupo.ruta_id ?? '').maybeSingle()
-      if (existing) { errores.push(`Ticket "${grupo.ticket}" ruta "${grupo.ruta_id}" del ${grupo.fecha} ya existe. Se omite.`); continue }
+      if (existing) {
+        const m = `Ticket "${grupo.ticket}" del ${grupo.fecha} ya existe en esta ruta`
+        errores.push(m)
+        for (const d of grupo.detalles) fallidos.push({ fila: d._fila, datos: d, motivo: m })
+        continue
+      }
 
       const litrosRomana = grupo.detalles.reduce((s: number, d: any) => s + (Number(d['Litros Recepcion']) || 0), 0)
 
@@ -562,13 +569,18 @@ export default function RecepcionPage() {
           litros_descuento: litrosDesc,
           litros_a_pagar: litrosPagar,
         })
-        if (detErr) errores.push(`Fila ${d._fila}: ${detErr.message}`)
-        else ok++
+        if (detErr) {
+          errores.push(`Fila ${d._fila}: ${detErr.message}`)
+          fallidos.push({ fila: d._fila, datos: d, motivo: detErr.message })
+        } else {
+          ok++
+          exitosos.push({ Fila: d._fila, Fecha: grupo.fecha, 'Cód. Ganadero': cod, 'Litros': litrosDet, 'Ticket': grupo.ticket, Placa: grupo.placa, 'Crioscopía': crioMatch.punto_crioscopico, 'Agua %': pctAgua, 'Dcto L': Math.round(litrosDesc), 'A Pagar L': Math.round(litrosPagar) })
+        }
       }
     }
 
     logAction(supabase, curUser, 'Recepción', 'IMPORTAR_MASIVO', `Importados ${ok} registros. Errores: ${errores.length}`)
-    setImportResult({ ok, errores })
+    setImportResult({ ok, errores, exitosos, fallidos })
     setImportLoading(false)
     if (ok > 0) loadHistorial()
   }
@@ -1026,33 +1038,88 @@ export default function RecepcionPage() {
 
       {isImportModalOpen && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto overflow-hidden animate-in zoom-in-95">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-auto overflow-hidden animate-in zoom-in-95">
             <div className="flex justify-between items-center bg-slate-50 border-b border-slate-200 p-4">
               <h3 className="font-black text-slate-800 text-sm flex items-center gap-2"><Upload size={16} className="text-blue-600" /> Importar Recepciones desde Excel</h3>
-              <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+              <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="p-1 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-500 transition-colors"><X size={20} /></button>
             </div>
             <div className="p-4 sm:p-6">
               {importResult ? (
                 <div className="space-y-4">
+                  {/* Contadores */}
                   <div className="flex gap-4">
                     <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
                       <CheckCircle2 className="text-emerald-500 mx-auto mb-2" size={32} />
                       <p className="text-2xl font-black text-emerald-700">{importResult.ok}</p>
                       <p className="text-xs font-bold text-emerald-600">Detalles importados</p>
                     </div>
-                    {importResult.errores.length > 0 && (
+                    {importResult.fallidos.length > 0 && (
                       <div className="flex-1 bg-red-50 border border-red-200 rounded-xl p-4 text-center">
                         <AlertCircle className="text-red-500 mx-auto mb-2" size={32} />
-                        <p className="text-2xl font-black text-red-700">{importResult.errores.length}</p>
-                        <p className="text-xs font-bold text-red-600">Advertencias</p>
+                        <p className="text-2xl font-black text-red-700">{importResult.fallidos.length}</p>
+                        <p className="text-xs font-bold text-red-600">No importados</p>
                       </div>
                     )}
                   </div>
-                  {importResult.errores.length > 0 && (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-4 max-h-48 overflow-y-auto space-y-1">
-                      {importResult.errores.map((e, i) => <p key={i} className="text-xs text-red-700 font-semibold">• {e}</p>)}
+
+                  {/* Tabla de registros exitosos */}
+                  {importResult.exitosos.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-700 uppercase mb-1">Registros importados correctamente</p>
+                      <div className="overflow-x-auto max-h-48 border border-emerald-200 rounded-xl">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-emerald-50 sticky top-0">
+                            <tr>
+                              {Object.keys(importResult.exitosos[0]).map(col => (
+                                <th key={col} className="px-3 py-2 text-left font-black text-emerald-700 whitespace-nowrap">{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-emerald-50">
+                            {importResult.exitosos.map((row, i) => (
+                              <tr key={i} className="hover:bg-emerald-50">
+                                {Object.keys(importResult.exitosos[0]).map(col => (
+                                  <td key={col} className="px-3 py-2 text-slate-700 whitespace-nowrap">{String(row[col] ?? '')}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
+
+                  {/* Tabla de registros fallidos */}
+                  {importResult.fallidos.length > 0 && (
+                    <div>
+                      <p className="text-[10px] font-black text-red-700 uppercase mb-1">Registros no importados</p>
+                      <div className="overflow-x-auto max-h-48 border border-red-200 rounded-xl">
+                        <table className="w-full text-[11px]">
+                          <thead className="bg-red-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-black text-red-700 whitespace-nowrap">#</th>
+                              <th className="px-3 py-2 text-left font-black text-red-700 whitespace-nowrap">Fecha ingreso</th>
+                              <th className="px-3 py-2 text-left font-black text-red-700 whitespace-nowrap">Cod. Ganadero</th>
+                              <th className="px-3 py-2 text-left font-black text-red-700 whitespace-nowrap">Ticket</th>
+                              <th className="px-3 py-2 text-left font-black text-red-700 whitespace-nowrap">Motivo</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-red-50">
+                            {importResult.fallidos.map((f, i) => (
+                              <tr key={i} className="hover:bg-red-50">
+                                <td className="px-3 py-2 font-bold text-red-400">{f.fila}</td>
+                                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{String(f.datos['Fecha ingreso'] ?? '')}</td>
+                                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{String(f.datos['Codigo Ganadero'] ?? '')}</td>
+                                <td className="px-3 py-2 text-slate-700 whitespace-nowrap">{String(f.datos['Ticket Romana'] ?? '')}</td>
+                                <td className="px-3 py-2 text-red-700 font-semibold whitespace-nowrap">{f.motivo}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
                   <button onClick={() => { setIsImportModalOpen(false); setImportResult(null) }} className="w-full bg-blue-600 text-white font-bold py-3 rounded-xl">Cerrar</button>
                 </div>
               ) : (
