@@ -13,6 +13,7 @@ export default function GanaderosPage() {
   const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [ganaderos, setGanaderos] = useState<any[]>([])
   const [rutasDisponibles, setRutasDisponibles] = useState<any[]>([])
+  const [fabricasDisponibles, setFabricasDisponibles] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -62,14 +63,17 @@ export default function GanaderosPage() {
     setIsAdmin(profile?.rol === 'admin')
     setCurUser(userObj)
 
-    const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').order('created_at', { ascending: false })
+    const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta), fabricas(nombre,codigo)').order('created_at', { ascending: false })
     const rutaQ = supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
+    const fabQ = supabase.from('fabricas').select('id, nombre, codigo').order('nombre')
     if (selectedFabricaId && selectedFabricaId !== 'all') {
+      ganaderoQ.eq('fabrica_id', selectedFabricaId)
       rutaQ.eq('fabrica_id', selectedFabricaId)
     }
-    const [gRes, rRes] = await Promise.all([ganaderoQ, rutaQ])
+    const [gRes, rRes, fRes] = await Promise.all([ganaderoQ, rutaQ, fabQ])
     if (gRes.data) setGanaderos(gRes.data)
     if (rRes.data) setRutasDisponibles(rRes.data)
+    if (fRes.data) setFabricasDisponibles(fRes.data)
     setLoading(false)
   }
 
@@ -140,7 +144,7 @@ export default function GanaderosPage() {
       ubicacion: editGanadero.ubicacion || null,
       tipo_proveedor: editGanadero.tipo_proveedor,
       activo: editGanadero.activo !== false,
-      ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
+      ...(editGanadero.fabrica_id ? { fabrica_id: editGanadero.fabrica_id } : {})
     }
 
     if (editGanadero.id) {
@@ -173,6 +177,7 @@ export default function GanaderosPage() {
     const rows = ganaderos.map(g => ({
       'Código Ganadero': g.codigo_ganadero,
       'Nombre': g.nombre,
+      'Código Fábrica': g.fabricas?.codigo || '',
       'Ubicación': g.ubicacion || '',
       'Teléfono': g.telefono || '',
       'Cédula': g.cedula || '',
@@ -196,6 +201,7 @@ export default function GanaderosPage() {
     const ejemplo = [{
       'Código Ganadero*': 'G001',
       'Nombre*': 'Juan Pérez',
+      'Código Fábrica*': 'FAB01',
       'Ubicación': 'Sector Norte',
       'Teléfono': '04141234567',
       'Cédula': '12345678',
@@ -236,8 +242,11 @@ export default function GanaderosPage() {
     const errores: string[] = []
     let ok = 0
 
-    // Obtener todos los códigos existentes
+    // Obtener todos los códigos existentes y todas las fábricas
     const { data: existentes } = await supabase.from('ganaderos').select('codigo_ganadero, nombre')
+    const { data: todasFabricas } = await supabase.from('fabricas').select('id, codigo')
+    const fabricasPorCodigo: Record<string, string> = {}
+    for (const f of (todasFabricas || [])) fabricasPorCodigo[f.codigo?.toLowerCase()] = f.id
     const codigosExistentes = new Set((existentes || []).map((g: any) => g.codigo_ganadero?.toLowerCase()))
     const codigosEnArchivo = new Set<string>()
 
@@ -256,6 +265,18 @@ export default function GanaderosPage() {
 
       codigosEnArchivo.add(codigo.toLowerCase())
 
+      // Buscar fábrica por código (columna Excel > contexto activo > error)
+      const codigoFabExcel = String(row['Código Fábrica*'] || row['Código Fábrica'] || '').trim()
+      let fabrica_id: string | null = null
+      if (codigoFabExcel) {
+        fabrica_id = fabricasPorCodigo[codigoFabExcel.toLowerCase()] || null
+        if (!fabrica_id) { errores.push(`Fila ${fila}: Fábrica "${codigoFabExcel}" no existe.`); continue }
+      } else if (selectedFabricaId && selectedFabricaId !== 'all') {
+        fabrica_id = selectedFabricaId
+      } else {
+        errores.push(`Fila ${fila}: Falta el Código Fábrica y no hay fábrica seleccionada.`); continue
+      }
+
       // Buscar ruta por código
       const codigoRuta = String(row['Código Ruta'] || '').trim()
       const rutaEncontrada = rutasDisponibles.find(r => r.codigo_ruta?.toLowerCase() === codigoRuta.toLowerCase())
@@ -263,6 +284,7 @@ export default function GanaderosPage() {
       const payload: any = {
         codigo_ganadero: codigo,
         nombre,
+        fabrica_id,
         ubicacion: String(row['Ubicación'] || '').trim() || null,
         telefono: String(row['Teléfono'] || '') || null,
         cedula: String(row['Cédula'] || '') || null,
@@ -272,7 +294,6 @@ export default function GanaderosPage() {
         tipo_proveedor: tipo,
         ruta_id: rutaEncontrada?.id || null,
         activo: String(row['Activo (SI/NO)'] || 'SI').trim().toUpperCase() !== 'NO',
-        ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
       }
 
       const { error } = await supabase.from('ganaderos').insert(payload)
@@ -336,7 +357,7 @@ export default function GanaderosPage() {
               </button>
             )}
             <button onClick={() => {
-              setEditGanadero({ codigo_ganadero: '', nombre: '', ruta_id: '', grupo: '', sap: '', cedula: '', rif: '', telefono: '', ubicacion: '', tipo_proveedor: 'TERCERO' })
+              setEditGanadero({ codigo_ganadero: '', nombre: '', ruta_id: '', grupo: '', sap: '', cedula: '', rif: '', telefono: '', ubicacion: '', tipo_proveedor: 'TERCERO', fabrica_id: selectedFabricaId !== 'all' ? selectedFabricaId : '' })
               setOriginalGrupo(null)
               setErrorDuplicado('')
               setIsModalOpen(true)
@@ -388,6 +409,7 @@ export default function GanaderosPage() {
                 {isAdmin && <th className="px-4 py-3 w-10 text-center"><input type="checkbox" checked={selectedIds.size === filteredGanaderos.length && filteredGanaderos.length > 0} onChange={toggleAll} /></th>}
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Acciones</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Código</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Fábrica</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Nombre</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Cédula / RIF</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Teléfono</th>
@@ -406,6 +428,11 @@ export default function GanaderosPage() {
                     {isAdmin && <button onClick={() => handleDeleteSingle(item.id, item.nombre)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{item.codigo_ganadero}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {item.fabricas
+                      ? <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded">{item.fabricas.codigo}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="font-bold text-slate-800 text-xs">{item.nombre}</div>
                     <div className="text-[10px] text-slate-500 truncate max-w-[150px]">{item.ubicacion || 'Sin ubicación'}</div>
@@ -589,6 +616,14 @@ export default function GanaderosPage() {
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest pt-2">Clasificación</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fábrica *</label>
+                  <select value={editGanadero.fabrica_id || ''} onChange={e => setEditGanadero({ ...editGanadero, fabrica_id: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                    <option value="">(Sin asignar)</option>
+                    {fabricasDisponibles.map(f => <option key={f.id} value={f.id}>{f.codigo} — {f.nombre}</option>)}
+                  </select>
+                </div>
+                <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Grupo</label>
                   <input type="text" value={editGanadero.grupo || ''} onChange={e => setEditGanadero({ ...editGanadero, grupo: e.target.value })}
                     placeholder="Ej: A"
@@ -602,7 +637,7 @@ export default function GanaderosPage() {
                     <option value="PROPIO">Propio</option>
                   </select>
                 </div>
-                <div>
+                <div className="sm:col-span-2">
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ruta</label>
                   <select value={editGanadero.ruta_id || ''} onChange={e => setEditGanadero({ ...editGanadero, ruta_id: e.target.value })}
                     className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500">

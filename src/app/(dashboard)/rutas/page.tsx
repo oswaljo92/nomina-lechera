@@ -13,6 +13,7 @@ export default function RutasPage() {
   const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [rutas, setRutas] = useState<any[]>([])
   const [ganaderosMap, setGanaderosMap] = useState<Record<string, any[]>>({})
+  const [fabricasDisponibles, setFabricasDisponibles] = useState<any[]>([])
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -62,11 +63,13 @@ export default function RutasPage() {
     setIsAdmin(profile?.rol === 'admin')
     setCurUser(userObj)
 
-    const rutaQ = supabase.from('rutas').select('*').order('created_at', { ascending: false })
+    const rutaQ = supabase.from('rutas').select('*, fabricas(nombre,codigo)').order('created_at', { ascending: false })
     if (selectedFabricaId && selectedFabricaId !== 'all') rutaQ.eq('fabrica_id', selectedFabricaId)
     const ganaderosQ = supabase.from('ganaderos').select('codigo_ganadero, nombre, grupo, ruta_id').eq('activo', true)
-    const [{ data: rutasData }, { data: ganaderosData }] = await Promise.all([rutaQ, ganaderosQ])
+    const fabQ = supabase.from('fabricas').select('id, nombre, codigo').order('nombre')
+    const [{ data: rutasData }, { data: ganaderosData }, { data: fabData }] = await Promise.all([rutaQ, ganaderosQ, fabQ])
     if (rutasData) setRutas(rutasData)
+    if (fabData) setFabricasDisponibles(fabData)
     if (ganaderosData) {
       const map: Record<string, any[]> = {}
       for (const g of ganaderosData) {
@@ -139,7 +142,7 @@ export default function RutasPage() {
       rif: editRuta.rif || null,
       grupo: editRuta.grupo || null,
       activo: editRuta.activo !== false,
-      ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
+      ...(editRuta.fabrica_id ? { fabrica_id: editRuta.fabrica_id } : {})
     }
 
     if (editRuta.id) {
@@ -172,6 +175,7 @@ export default function RutasPage() {
     const rows = rutas.map(r => ({
       'Código Ruta': r.codigo_ruta,
       'Nombre Ruta': r.nombre_ruta,
+      'Código Fábrica': r.fabricas?.codigo || '',
       'SAP': r.sap || '',
       'Cédula': r.cedula || '',
       'RIF': r.rif || '',
@@ -190,6 +194,7 @@ export default function RutasPage() {
     const ejemplo = [{
       'Código Ruta*': 'R01',
       'Nombre Ruta*': 'Ruta Norte',
+      'Código Fábrica*': 'FAB01',
       'SAP': 'SAP001',
       'Cédula': '12345678',
       'RIF': '123456789',
@@ -224,6 +229,9 @@ export default function RutasPage() {
     let ok = 0
 
     const { data: existentes } = await supabase.from('rutas').select('codigo_ruta')
+    const { data: todasFabricas } = await supabase.from('fabricas').select('id, codigo')
+    const fabricasPorCodigo: Record<string, string> = {}
+    for (const f of (todasFabricas || [])) fabricasPorCodigo[f.codigo?.toLowerCase()] = f.id
     const codigosExistentes = new Set((existentes || []).map((r: any) => r.codigo_ruta?.toLowerCase()))
     const codigosEnArchivo = new Set<string>()
 
@@ -240,14 +248,26 @@ export default function RutasPage() {
 
       codigosEnArchivo.add(codigo.toLowerCase())
 
+      // Resolver fábrica: columna Excel > contexto activo > error
+      const codigoFabExcel = String(row['Código Fábrica*'] || row['Código Fábrica'] || '').trim()
+      let fabrica_id: string | null = null
+      if (codigoFabExcel) {
+        fabrica_id = fabricasPorCodigo[codigoFabExcel.toLowerCase()] || null
+        if (!fabrica_id) { errores.push(`Fila ${fila}: Fábrica "${codigoFabExcel}" no existe.`); continue }
+      } else if (selectedFabricaId && selectedFabricaId !== 'all') {
+        fabrica_id = selectedFabricaId
+      } else {
+        errores.push(`Fila ${fila}: Falta el Código Fábrica y no hay fábrica seleccionada.`); continue
+      }
+
       const payload: any = {
         codigo_ruta: codigo,
         nombre_ruta: nombre,
+        fabrica_id,
         sap: String(row['SAP'] || '').trim() || null,
         cedula: String(row['Cédula'] || '') || null,
         rif: String(row['RIF'] || '') || null,
         activo: String(row['Activo (SI/NO)'] || 'SI').trim().toUpperCase() !== 'NO',
-        ...(selectedFabricaId && selectedFabricaId !== 'all' ? { fabrica_id: selectedFabricaId } : {})
       }
 
       const { error } = await supabase.from('rutas').insert(payload)
@@ -311,7 +331,7 @@ export default function RutasPage() {
                 <Trash2 size={16} /> Borrar ({selectedIds.size})
               </button>
             )}
-            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '' }); setOriginalGrupo(null); setErrorDuplicado(''); setIsModalOpen(true) }}
+            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '', fabrica_id: selectedFabricaId !== 'all' ? selectedFabricaId : '' }); setOriginalGrupo(null); setErrorDuplicado(''); setIsModalOpen(true) }}
               className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
               <Plus size={18} /> Nueva Ruta
             </button>
@@ -357,6 +377,7 @@ export default function RutasPage() {
                 {isAdmin && <th className="px-4 py-3 w-10 text-center"><input type="checkbox" checked={selectedIds.size === filteredRutas.length && filteredRutas.length > 0} onChange={toggleAll} /></th>}
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Acciones</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Código</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Fábrica</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Nombre Ruta</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Grupo</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ganaderos</th>
@@ -376,6 +397,11 @@ export default function RutasPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-black text-blue-600">{ruta.codigo_ruta}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {ruta.fabricas
+                      ? <span className="bg-indigo-100 text-indigo-800 text-[10px] font-black px-2 py-0.5 rounded">{ruta.fabricas.codigo}</span>
+                      : <span className="text-slate-300">—</span>}
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap text-xs font-bold text-slate-800">{ruta.nombre_ruta}</td>
                   <td className="px-4 py-3 whitespace-nowrap text-center">
                     {ruta.grupo
@@ -467,6 +493,14 @@ export default function RutasPage() {
 
               <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Identificación</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Fábrica *</label>
+                  <select value={editRuta.fabrica_id || ''} onChange={e => setEditRuta({ ...editRuta, fabrica_id: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500">
+                    <option value="">(Sin asignar)</option>
+                    {fabricasDisponibles.map(f => <option key={f.id} value={f.id}>{f.codigo} — {f.nombre}</option>)}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Código Ruta *</label>
                   <input autoFocus type="text" value={editRuta.codigo_ruta}
