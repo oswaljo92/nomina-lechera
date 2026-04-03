@@ -529,6 +529,9 @@ export default function RecepcionPage() {
         const litrosDet = Number(d['Litros Recepcion']) || 0
         const crioVal = Number(d['Crioscopia']) || 0
         const crioMatch = nearestCrio(crioVal)
+        const pctAgua = crioMatch.porcentaje_agua || 0
+        const litrosDesc = (litrosDet * pctAgua) / 100
+        const litrosPagar = litrosDet - litrosDesc
         const { error: detErr } = await supabase.from('recepciones_detalle').insert({
           recepcion_id: camionIns.id,
           ganadero_id: ganObj.id,
@@ -540,9 +543,9 @@ export default function RecepcionPage() {
           crioscopia: crioMatch.punto_crioscopico,
           h_reductasa: Number(d['Reductasa']) || 0,
           ufc: Number(d['UFC']) || 0,
-          porcentaje_agua_desc: crioMatch.porcentaje_agua || 0,
-          litros_descuento: 0,
-          litros_a_pagar: litrosDet,
+          porcentaje_agua_desc: pctAgua,
+          litros_descuento: litrosDesc,
+          litros_a_pagar: litrosPagar,
         })
         if (detErr) errores.push(`Fila ${d._fila}: ${detErr.message}`)
         else ok++
