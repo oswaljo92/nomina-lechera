@@ -65,7 +65,6 @@ export default function GanaderosPage() {
     const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').order('created_at', { ascending: false })
     const rutaQ = supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
     if (selectedFabricaId && selectedFabricaId !== 'all') {
-      ganaderoQ.eq('fabrica_id', selectedFabricaId)
       rutaQ.eq('fabrica_id', selectedFabricaId)
     }
     const [gRes, rRes] = await Promise.all([ganaderoQ, rutaQ])
