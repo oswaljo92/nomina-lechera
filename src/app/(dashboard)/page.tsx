@@ -140,6 +140,7 @@ export default function DashboardPage() {
 
   const [pppMode, setPppMode] = useState<'recibido' | 'pagado'>('recibido')
   const [selectedSemanaPPP, setSelectedSemanaPPP] = useState('')
+  const [showGanaderoDetalle, setShowGanaderoDetalle] = useState(false)
 
   const [showQuality, setShowQuality] = useState({
     Grasa: true, Proteina: true, Temperatura: true, Crioscopia: false
@@ -172,7 +173,7 @@ export default function DashboardPage() {
         supabase.from('recepciones_detalle').select(`
           *,
           recepciones_camion ( fecha_ingreso, fabrica_id ),
-          ganaderos ( tipo_proveedor, grupo )
+          ganaderos ( tipo_proveedor, grupo, codigo_ganadero )
         `),
         supabase.from('recepciones_camion').select('id, litros_romana, fabrica_id, fecha_ingreso'),
         supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true }),
@@ -371,6 +372,54 @@ export default function DashboardPage() {
       }))
       .filter(f => f.litros > 0)
   }, [recFilteredPPP, fabricas, preciosSemanales])
+
+  // ── PPP detalle por ganadero (recibido) ───────────────────────────────────
+  const pppByGanadero = useMemo(() => {
+    const map = new Map<string, {
+      codigo: string, grupo: string,
+      litros: number, sumLeche: number, sumFlete: number,
+      litsLeche: number, litsFlete: number, litsTotal: number,
+      sinPrecio: boolean
+    }>()
+    for (const r of recFilteredPPP) {
+      const gId = r.ganadero_id
+      if (!gId) continue
+      const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) continue
+      const wedStr = getWednesdayOfWeek(fechaStr)
+      const grupo = r.ganaderos?.grupo
+      const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
+      const litros = Number(r.litros_recepcion || 0)
+      if (litros === 0) continue
+      const precioLeche = Number(precio?.precio_leche_usd || 0)
+      const precioFlete = Number(precio?.precio_flete_usd || 0)
+      if (!map.has(gId)) {
+        map.set(gId, {
+          codigo: r.ganaderos?.codigo_ganadero || String(gId).slice(0, 8),
+          grupo: grupo || '—',
+          litros: 0, sumLeche: 0, sumFlete: 0,
+          litsLeche: 0, litsFlete: 0, litsTotal: 0,
+          sinPrecio: false,
+        })
+      }
+      const e = map.get(gId)!
+      e.litros += litros
+      e.sumLeche += litros * precioLeche
+      e.sumFlete += litros * precioFlete
+      if (precioLeche > 0) e.litsLeche += litros
+      if (precioFlete > 0) e.litsFlete += litros
+      if (precioLeche > 0 || precioFlete > 0) e.litsTotal += litros
+      else e.sinPrecio = true
+    }
+    return Array.from(map.values())
+      .map(e => ({
+        ...e,
+        pppLeche: e.litsLeche > 0 ? e.sumLeche / e.litsLeche : 0,
+        pppFlete: e.litsFlete > 0 ? e.sumFlete / e.litsFlete : 0,
+        pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
+      }))
+      .sort((a, b) => a.codigo.localeCompare(b.codigo))
+  }, [recFilteredPPP, preciosSemanales])
 
   // ── KPIs de calidad ────────────────────────────────────────────────────────
   const qualityMetrics = useMemo(() => {
@@ -652,21 +701,21 @@ export default function DashboardPage() {
         />
         <KpiCard
           label="PPP Leche"
-          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppLecheUSD.toFixed(4)}`}
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppLecheUSD.toFixed(3)}`}
           icon={Droplets} gradient="from-teal-500 to-emerald-400"
           iconBg="from-teal-500 to-emerald-400" accent="bg-teal-100 text-teal-700"
           sub="por litro"
         />
         <KpiCard
           label="PPP Flete"
-          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppFleteUSD.toFixed(4)}`}
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppFleteUSD.toFixed(3)}`}
           icon={Truck} gradient="from-orange-500 to-amber-400"
           iconBg="from-orange-500 to-amber-400" accent="bg-orange-100 text-orange-700"
           sub="por litro"
         />
         <KpiCard
           label="PPP Total (Leche+Flete)"
-          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppTotalUSD.toFixed(4)}`}
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppTotalUSD.toFixed(3)}`}
           icon={DollarSign} gradient="from-violet-500 to-purple-400"
           iconBg="from-violet-500 to-purple-400" accent="bg-violet-100 text-violet-700"
           sub="por litro"
@@ -737,9 +786,9 @@ export default function DashboardPage() {
                   <tr key={f.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                     <td className="py-2.5 pr-4 font-bold text-slate-700">{f.nombre}</td>
                     <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
-                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(3)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {f.litrosSinPrecio > 0
                         ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</Link>
@@ -753,9 +802,9 @@ export default function DashboardPage() {
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
                     <td className="py-2.5 pr-4 font-black text-slate-800">Global (todas las fábricas)</td>
                     <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactoryRecibido.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
-                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financialsRecibido.pppLecheUSD.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financialsRecibido.pppLecheUSD.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(3)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {(() => { const s = financialsByFactoryRecibido.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactoryRecibido.reduce((a,f)=>a+f.litros,0); return s > 0 ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</Link> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
                     </td>
@@ -792,9 +841,9 @@ export default function DashboardPage() {
                   <tr key={f.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                     <td className="py-2.5 pr-4 font-bold text-slate-700">{f.nombre}</td>
                     <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
-                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(3)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {f.litrosSinPrecio > 0
                         ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</Link>
@@ -808,9 +857,9 @@ export default function DashboardPage() {
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
                     <td className="py-2.5 pr-4 font-black text-slate-800">Global (todas las fábricas)</td>
                     <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactory.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
-                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financials.pppLecheUSD.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financials.pppFleteUSD.toFixed(4)}</td>
-                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financials.pppLecheUSD.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financials.pppFleteUSD.toFixed(3)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(3)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {(() => { const s = financialsByFactory.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactory.reduce((a,f)=>a+f.litros,0); return s > 0 ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</Link> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
                     </td>
@@ -819,6 +868,79 @@ export default function DashboardPage() {
               )}
             </table>
           </div>
+        </div>
+      )}
+
+      {/* ── DETALLE PPP POR GANADERO ── */}
+      {pppByGanadero.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <button
+            onClick={() => setShowGanaderoDetalle(v => !v)}
+            className="w-full flex items-center gap-2 p-4 sm:p-5 text-left hover:bg-slate-50 transition-colors"
+          >
+            <Calculator size={18} className="text-indigo-500 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <span className="font-black text-slate-700 text-sm uppercase tracking-wide">Detalle PPP por Ganadero</span>
+              <span className="ml-2 text-[10px] font-black bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full uppercase">Litros Recibidos</span>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {(() => {
+                const sinP = pppByGanadero.filter(g => g.sinPrecio)
+                return sinP.length > 0
+                  ? <span className="text-[10px] font-black bg-red-100 text-red-700 px-2 py-0.5 rounded-full">{sinP.length} sin precio</span>
+                  : <span className="text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">✓ todos con precio</span>
+              })()}
+              <span className="text-[10px] font-black bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">{pppByGanadero.length} ganaderos</span>
+              <span className={`text-slate-400 transition-transform duration-200 ${showGanaderoDetalle ? 'rotate-180' : ''}`}>▼</span>
+            </div>
+          </button>
+          {showGanaderoDetalle && (
+            <div className="border-t border-slate-100 overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Cód. Proveedor</th>
+                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Grupo</th>
+                    <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Recepción Lts</th>
+                    <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest px-4 py-2">Leche</th>
+                    <th className="text-right text-[10px] font-black text-orange-500 uppercase tracking-widest px-4 py-2">Flete</th>
+                    <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest px-4 py-2">Leche + Flete</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pppByGanadero.map((g, i) => (
+                    <tr key={i} className={`border-b border-slate-50 transition-colors ${g.sinPrecio ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
+                      <td className="px-4 py-2 font-black text-slate-700">{g.codigo}</td>
+                      <td className="px-4 py-2 text-xs font-semibold text-slate-500">{g.grupo}</td>
+                      <td className="px-4 py-2 text-right font-semibold text-slate-600">{Math.round(g.litros).toLocaleString('es-VE')}</td>
+                      <td className="px-4 py-2 text-right font-black text-teal-700">
+                        {g.pppLeche > 0 ? `$${g.pppLeche.toFixed(3)}` : <span className="text-red-400 text-xs font-black">sin precio</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right font-black text-orange-700">
+                        {g.pppFlete > 0 ? `$${g.pppFlete.toFixed(3)}` : <span className="text-red-400 text-xs font-black">sin precio</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right font-black text-violet-700">
+                        {g.pppTotal > 0 ? `$${g.pppTotal.toFixed(3)}` : <span className="text-red-400 text-xs font-black">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td className="px-4 py-2.5 font-black text-slate-800" colSpan={2}>
+                      Total ({pppByGanadero.length} ganaderos)
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-black text-slate-700">
+                      {Math.round(pppByGanadero.reduce((a, g) => a + g.litros, 0)).toLocaleString('es-VE')} L
+                    </td>
+                    <td className="px-4 py-2.5 text-right font-black text-teal-800">${financialsRecibido.pppLecheUSD.toFixed(3)}</td>
+                    <td className="px-4 py-2.5 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(3)}</td>
+                    <td className="px-4 py-2.5 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(3)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
