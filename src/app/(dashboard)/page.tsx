@@ -211,10 +211,8 @@ export default function DashboardPage() {
   const financials = useMemo(() => {
     let sumLecheUSD = 0, sumFleteUSD = 0
     let sumLecheBs = 0, sumFleteBs = 0
-    let sumWeightedTotal = 0, sumLitros = 0
-    // Para precio prom ponderado Bs: solo semana en curso, tasa diaria real
-    let sumWeightedBsSemana = 0, sumLitrosSemana = 0
-    const currentWed = getCurrentWednesday()
+    // Acumuladores separados: solo litros con precio > 0 en cada componente
+    let sumLitsLeche = 0, sumLitsFlete = 0, sumLitsTotal = 0
 
     for (const r of recFiltered) {
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
@@ -226,27 +224,21 @@ export default function DashboardPage() {
       const tasa = tasaMap.get(fechaStr) ?? lastTasa
       const precioLeche = Number(precio?.precio_leche_usd || 0)
       const precioFlete = Number(precio?.precio_flete_usd || 0)
-      const precioTotal = precioLeche + precioFlete
 
       sumLecheUSD += litros * precioLeche
       sumFleteUSD += litros * precioFlete
       sumLecheBs += litros * precioLeche * tasa
       sumFleteBs += litros * precioFlete * tasa
-      sumWeightedTotal += precioTotal * litros
-      sumLitros += litros
-
-      // Precio prom ponderado Bs: acumular solo la semana en curso con tasa diaria
-      if (wedStr === currentWed) {
-        sumWeightedBsSemana += precioTotal * litros * tasa
-        sumLitrosSemana += litros
-      }
+      // Solo acumular litros al denominador si el componente tiene precio asignado
+      if (precioLeche > 0) sumLitsLeche += litros
+      if (precioFlete > 0) sumLitsFlete += litros
+      if (precioLeche > 0 || precioFlete > 0) sumLitsTotal += litros
     }
 
-    const precioPromUSD = sumLitros > 0 ? sumWeightedTotal / sumLitros : 0
-    const precioPromBs = sumLitrosSemana > 0 ? sumWeightedBsSemana / sumLitrosSemana : precioPromUSD * lastTasa
     return {
-      precioPromUSD,
-      precioPromBs,
+      pppLecheUSD: sumLitsLeche > 0 ? sumLecheUSD / sumLitsLeche : 0,
+      pppFleteUSD: sumLitsFlete > 0 ? sumFleteUSD / sumLitsFlete : 0,
+      pppTotalUSD: sumLitsTotal > 0 ? (sumLecheUSD + sumFleteUSD) / sumLitsTotal : 0,
       totalPagarUSD: sumLecheUSD + sumFleteUSD,
       totalPagarBs: sumLecheBs + sumFleteBs,
       totalLecheUSD: sumLecheUSD,
@@ -255,6 +247,43 @@ export default function DashboardPage() {
       totalFleteBs: sumFleteBs,
     }
   }, [recFiltered, preciosSemanales, tasaMap, lastTasa])
+
+  // ── PPP por fábrica ────────────────────────────────────────────────────────
+  const financialsByFactory = useMemo(() => {
+    const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
+    for (const f of fabricas) {
+      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
+    }
+    for (const r of recepciones) {
+      const fabId = r.recepciones_camion?.fabrica_id
+      if (!fabId || !map.has(fabId)) continue
+      const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) continue
+      const wedStr = getWednesdayOfWeek(fechaStr)
+      const grupo = r.ganaderos?.grupo
+      const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
+      const litros = Number(r.litros_a_pagar || r.litros_recepcion || 0)
+      const precioLeche = Number(precio?.precio_leche_usd || 0)
+      const precioFlete = Number(precio?.precio_flete_usd || 0)
+      const entry = map.get(fabId)!
+      entry.litros += litros
+      entry.sumLeche += litros * precioLeche
+      entry.sumFlete += litros * precioFlete
+      if (precioLeche > 0) entry.litsLeche += litros
+      if (precioFlete > 0) entry.litsFlete += litros
+      if (precioLeche > 0 || precioFlete > 0) entry.litsTotal += litros
+    }
+    return Array.from(map.entries())
+      .map(([id, e]) => ({
+        id,
+        nombre: e.nombre,
+        litros: e.litros,
+        pppLeche: e.litsLeche > 0 ? e.sumLeche / e.litsLeche : 0,
+        pppFlete: e.litsFlete > 0 ? e.sumFlete / e.litsFlete : 0,
+        pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
+      }))
+      .filter(f => f.litros > 0)
+  }, [recepciones, fabricas, preciosSemanales, tasaMap, lastTasa])
 
   // ── KPIs de calidad ────────────────────────────────────────────────────────
   const qualityMetrics = useMemo(() => {
@@ -486,8 +515,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── KPIs PRINCIPALES (4 tarjetas) ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* ── KPIs PRINCIPALES (5 tarjetas) ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
           label="Volumen Total" value={fmtLts(totalLitros)}
           icon={Droplets} gradient="from-blue-500 to-cyan-400"
@@ -501,14 +530,20 @@ export default function DashboardPage() {
           sub="proveedores"
         />
         <KpiCard
-          label="Precio Prom. Pond." value={`$${financials.precioPromUSD.toFixed(3)}`}
-          icon={DollarSign} gradient="from-teal-500 to-emerald-400"
+          label="PPP Leche" value={`$${financials.pppLecheUSD.toFixed(4)}`}
+          icon={Droplets} gradient="from-teal-500 to-emerald-400"
           iconBg="from-teal-500 to-emerald-400" accent="bg-teal-100 text-teal-700"
           sub="por litro"
         />
         <KpiCard
-          label="Precio Prom. en Bs" value={`${financials.precioPromBs.toFixed(3)} Bs`}
-          icon={TrendingUp} gradient="from-violet-500 to-purple-400"
+          label="PPP Flete" value={`$${financials.pppFleteUSD.toFixed(4)}`}
+          icon={Truck} gradient="from-orange-500 to-amber-400"
+          iconBg="from-orange-500 to-amber-400" accent="bg-orange-100 text-orange-700"
+          sub="por litro"
+        />
+        <KpiCard
+          label="PPP Total (Leche+Flete)" value={`$${financials.pppTotalUSD.toFixed(4)}`}
+          icon={DollarSign} gradient="from-violet-500 to-purple-400"
           iconBg="from-violet-500 to-purple-400" accent="bg-violet-100 text-violet-700"
           sub="por litro"
         />
@@ -552,6 +587,51 @@ export default function DashboardPage() {
             color="bg-amber-500" textColor="text-amber-700" bgColor="bg-amber-50 border-amber-200" />
         </div>
       </div>
+
+      {/* ── PPP POR FÁBRICA ── */}
+      {financialsByFactory.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Calculator size={18} className="text-violet-600" />
+            <h2 className="font-black text-slate-700 text-base uppercase tracking-wide">Precio Promedio Ponderado por Fábrica</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 pr-4">Fábrica</th>
+                  <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 px-4">Litros</th>
+                  <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest pb-2 px-4">PPP Leche</th>
+                  <th className="text-right text-[10px] font-black text-orange-500 uppercase tracking-widest pb-2 px-4">PPP Flete</th>
+                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 pl-4">PPP Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {financialsByFactory.map(f => (
+                  <tr key={f.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 pr-4 font-bold text-slate-700">{f.nombre}</td>
+                    <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {financialsByFactory.length > 1 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td className="py-2.5 pr-4 font-black text-slate-800">Global (todas las fábricas)</td>
+                    <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactory.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financials.pppLecheUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financials.pppFleteUSD.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(4)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* ── GRÁFICO VOLUMEN SEMANAL ── */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
