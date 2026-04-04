@@ -137,6 +137,8 @@ export default function DashboardPage() {
   const [selectedSemanaChart, setSelectedSemanaChart] = useState('')
   const [selectedBcvSemana, setSelectedBcvSemana] = useState('')
 
+  const [pppMode, setPppMode] = useState<'recibido' | 'pagado'>('recibido')
+
   const [showQuality, setShowQuality] = useState({
     Grasa: true, Proteina: true, Temperatura: true, Crioscopia: false
   })
@@ -284,6 +286,76 @@ export default function DashboardPage() {
       }))
       .filter(f => f.litros > 0)
   }, [recepciones, fabricas, preciosSemanales, tasaMap, lastTasa])
+
+  // ── PPP recibido (litros_recepcion) ───────────────────────────────────────
+  const financialsRecibido = useMemo(() => {
+    let sumLecheUSD = 0, sumFleteUSD = 0
+    let sumLecheBs = 0, sumFleteBs = 0
+    let sumLitsLeche = 0, sumLitsFlete = 0, sumLitsTotal = 0
+
+    for (const r of recFiltered) {
+      const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) continue
+      const wedStr = getWednesdayOfWeek(fechaStr)
+      const grupo = r.ganaderos?.grupo
+      const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
+      const litros = Number(r.litros_recepcion || 0)
+      const tasa = tasaMap.get(fechaStr) ?? lastTasa
+      const precioLeche = Number(precio?.precio_leche_usd || 0)
+      const precioFlete = Number(precio?.precio_flete_usd || 0)
+
+      sumLecheUSD += litros * precioLeche
+      sumFleteUSD += litros * precioFlete
+      sumLecheBs += litros * precioLeche * tasa
+      sumFleteBs += litros * precioFlete * tasa
+      if (precioLeche > 0) sumLitsLeche += litros
+      if (precioFlete > 0) sumLitsFlete += litros
+      if (precioLeche > 0 || precioFlete > 0) sumLitsTotal += litros
+    }
+
+    return {
+      pppLecheUSD: sumLitsLeche > 0 ? sumLecheUSD / sumLitsLeche : 0,
+      pppFleteUSD: sumLitsFlete > 0 ? sumFleteUSD / sumLitsFlete : 0,
+      pppTotalUSD: sumLitsTotal > 0 ? (sumLecheUSD + sumFleteUSD) / sumLitsTotal : 0,
+      totalLitros: recFiltered.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0),
+    }
+  }, [recFiltered, preciosSemanales, tasaMap, lastTasa])
+
+  const financialsByFactoryRecibido = useMemo(() => {
+    const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
+    for (const f of fabricas) {
+      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
+    }
+    for (const r of recepciones) {
+      const fabId = r.recepciones_camion?.fabrica_id
+      if (!fabId || !map.has(fabId)) continue
+      const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) continue
+      const wedStr = getWednesdayOfWeek(fechaStr)
+      const grupo = r.ganaderos?.grupo
+      const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
+      const litros = Number(r.litros_recepcion || 0)
+      const precioLeche = Number(precio?.precio_leche_usd || 0)
+      const precioFlete = Number(precio?.precio_flete_usd || 0)
+      const entry = map.get(fabId)!
+      entry.litros += litros
+      entry.sumLeche += litros * precioLeche
+      entry.sumFlete += litros * precioFlete
+      if (precioLeche > 0) entry.litsLeche += litros
+      if (precioFlete > 0) entry.litsFlete += litros
+      if (precioLeche > 0 || precioFlete > 0) entry.litsTotal += litros
+    }
+    return Array.from(map.entries())
+      .map(([id, e]) => ({
+        id,
+        nombre: e.nombre,
+        litros: e.litros,
+        pppLeche: e.litsLeche > 0 ? e.sumLeche / e.litsLeche : 0,
+        pppFlete: e.litsFlete > 0 ? e.sumFlete / e.litsFlete : 0,
+        pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
+      }))
+      .filter(f => f.litros > 0)
+  }, [recepciones, fabricas, preciosSemanales])
 
   // ── KPIs de calidad ────────────────────────────────────────────────────────
   const qualityMetrics = useMemo(() => {
@@ -515,13 +587,26 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* ── SWITCH PPP ── */}
+      <div className="flex items-center gap-3">
+        <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'recibido' ? 'text-blue-700' : 'text-slate-400'}`}>PPP Recibido</span>
+        <button
+          onClick={() => setPppMode(m => m === 'recibido' ? 'pagado' : 'recibido')}
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${pppMode === 'pagado' ? 'bg-emerald-500' : 'bg-blue-500'}`}
+        >
+          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${pppMode === 'pagado' ? 'translate-x-6' : 'translate-x-1'}`} />
+        </button>
+        <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'pagado' ? 'text-emerald-700' : 'text-slate-400'}`}>PPP Pagados</span>
+      </div>
+
       {/* ── KPIs PRINCIPALES (5 tarjetas) ── */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard
-          label="Volumen Total" value={fmtLts(totalLitros)}
+          label="Volumen Total"
+          value={fmtLts(pppMode === 'recibido' ? financialsRecibido.totalLitros : totalLitros)}
           icon={Droplets} gradient="from-blue-500 to-cyan-400"
           iconBg="from-blue-500 to-cyan-400" accent="bg-blue-100 text-blue-700"
-          sub="litros"
+          sub={pppMode === 'recibido' ? 'recibidos' : 'pagados'}
         />
         <KpiCard
           label="Proveedores Activos" value={String(proveedoresActivos)}
@@ -530,19 +615,22 @@ export default function DashboardPage() {
           sub="proveedores"
         />
         <KpiCard
-          label="PPP Leche" value={`$${financials.pppLecheUSD.toFixed(4)}`}
+          label="PPP Leche"
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppLecheUSD.toFixed(4)}`}
           icon={Droplets} gradient="from-teal-500 to-emerald-400"
           iconBg="from-teal-500 to-emerald-400" accent="bg-teal-100 text-teal-700"
           sub="por litro"
         />
         <KpiCard
-          label="PPP Flete" value={`$${financials.pppFleteUSD.toFixed(4)}`}
+          label="PPP Flete"
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppFleteUSD.toFixed(4)}`}
           icon={Truck} gradient="from-orange-500 to-amber-400"
           iconBg="from-orange-500 to-amber-400" accent="bg-orange-100 text-orange-700"
           sub="por litro"
         />
         <KpiCard
-          label="PPP Total (Leche+Flete)" value={`$${financials.pppTotalUSD.toFixed(4)}`}
+          label="PPP Total (Leche+Flete)"
+          value={`$${(pppMode === 'recibido' ? financialsRecibido : financials).pppTotalUSD.toFixed(4)}`}
           icon={DollarSign} gradient="from-violet-500 to-purple-400"
           iconBg="from-violet-500 to-purple-400" accent="bg-violet-100 text-violet-700"
           sub="por litro"
@@ -588,12 +676,59 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── PPP POR FÁBRICA ── */}
+      {/* ── PPP RECIBIDO POR FÁBRICA ── */}
+      {financialsByFactoryRecibido.length > 0 && (
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Calculator size={18} className="text-blue-600" />
+            <h2 className="font-black text-slate-700 text-base uppercase tracking-wide">Precio Promedio Ponderado del litro de leche por Fábrica</h2>
+            <span className="ml-auto text-[10px] font-black bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full uppercase">Litros Recibidos</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 pr-4">Fábrica</th>
+                  <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 px-4">Litros</th>
+                  <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest pb-2 px-4">PPP Leche</th>
+                  <th className="text-right text-[10px] font-black text-orange-500 uppercase tracking-widest pb-2 px-4">PPP Flete</th>
+                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 pl-4">PPP Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {financialsByFactoryRecibido.map(f => (
+                  <tr key={f.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 pr-4 font-bold text-slate-700">{f.nombre}</td>
+                    <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {financialsByFactoryRecibido.length > 1 && (
+                <tfoot>
+                  <tr className="border-t-2 border-slate-200 bg-slate-50">
+                    <td className="py-2.5 pr-4 font-black text-slate-800">Global (todas las fábricas)</td>
+                    <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactoryRecibido.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
+                    <td className="py-2.5 px-4 text-right font-black text-teal-800">${financialsRecibido.pppLecheUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(4)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── PPP PAGADO POR FÁBRICA ── */}
       {financialsByFactory.length > 0 && (
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
           <div className="flex items-center gap-2 mb-4">
-            <Calculator size={18} className="text-violet-600" />
-            <h2 className="font-black text-slate-700 text-base uppercase tracking-wide">Precio Promedio Ponderado por Fábrica</h2>
+            <Calculator size={18} className="text-emerald-600" />
+            <h2 className="font-black text-slate-700 text-base uppercase tracking-wide">Precio Promedio Ponderado del litro de leche pagado por Fábrica</h2>
+            <span className="ml-auto text-[10px] font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full uppercase">Litros Pagados</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
