@@ -29,6 +29,93 @@ const formatDate = (isoStr: string) => {
   return `${d}-${m}-${y}`
 }
 
+// ─── Dialog in-app (reemplaza alert/confirm nativos) ─────────────────────────
+type DialogCfg = {
+  type: 'alert' | 'confirm'
+  title: string
+  message: string
+  confirmLabel: string
+  confirmCls: string
+  icon: 'info' | 'warn' | 'success' | 'error'
+  resolve: (v: boolean) => void
+}
+
+function AppDialog({ cfg, onClose }: { cfg: DialogCfg | null; onClose: (v: boolean) => void }) {
+  if (!cfg) return null
+  const iconMap = {
+    info:    <div className="p-2.5 rounded-xl bg-blue-50"><AlertTriangle size={20} className="text-blue-500" /></div>,
+    warn:    <div className="p-2.5 rounded-xl bg-amber-50"><AlertTriangle size={20} className="text-amber-500" /></div>,
+    success: <div className="p-2.5 rounded-xl bg-emerald-50"><CheckCircle2 size={20} className="text-emerald-500" /></div>,
+    error:   <div className="p-2.5 rounded-xl bg-red-50"><X size={20} className="text-red-500" /></div>,
+  }
+  return (
+    <div className="fixed inset-0 z-[500] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-start gap-3">
+          {iconMap[cfg.icon]}
+          <div className="min-w-0 flex-1">
+            <h3 className="font-black text-slate-800 text-base">{cfg.title}</h3>
+            <p className="text-sm text-slate-600 mt-1 leading-relaxed">{cfg.message}</p>
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end">
+          {cfg.type === 'confirm' && (
+            <button onClick={() => onClose(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+              Cancelar
+            </button>
+          )}
+          <button onClick={() => onClose(true)}
+            className={`px-4 py-2 rounded-xl text-white font-bold text-sm transition-colors ${cfg.confirmCls}`}>
+            {cfg.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function useDialog() {
+  const [cfg, setCfg] = useState<DialogCfg | null>(null)
+
+  const showConfirm = useCallback((message: string, opts?: {
+    title?: string; confirmLabel?: string; danger?: boolean
+  }): Promise<boolean> => {
+    return new Promise(resolve => setCfg({
+      type: 'confirm',
+      title: opts?.title ?? 'Confirmar acción',
+      message,
+      confirmLabel: opts?.confirmLabel ?? 'Confirmar',
+      confirmCls: opts?.danger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700',
+      icon: opts?.danger ? 'warn' : 'info',
+      resolve,
+    }))
+  }, [])
+
+  const showAlert = useCallback((message: string, opts?: {
+    title?: string; kind?: 'info' | 'success' | 'error'
+  }): Promise<void> => {
+    const kind = opts?.kind ?? 'info'
+    return new Promise(resolve => setCfg({
+      type: 'alert',
+      title: opts?.title ?? (kind === 'error' ? 'Error' : kind === 'success' ? '¡Listo!' : 'Aviso'),
+      message,
+      confirmLabel: 'Aceptar',
+      confirmCls: kind === 'error' ? 'bg-red-600 hover:bg-red-700' : kind === 'success' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-blue-600 hover:bg-blue-700',
+      icon: kind,
+      resolve: () => resolve(),
+    }))
+  }, [])
+
+  const handleClose = useCallback((v: boolean) => {
+    cfg?.resolve(v)
+    setCfg(null)
+  }, [cfg])
+
+  const Dialog = <AppDialog cfg={cfg} onClose={handleClose} />
+  return { showConfirm, showAlert, Dialog }
+}
+
 function UsuariosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => void }) {
   const supabase = createClient()
   const [usuariosActivos, setUsuariosActivos] = useState<any[]>([])
@@ -520,6 +607,7 @@ function TasasRow({ t, actualizarTasa, semana }: { t: any, actualizarTasa: any, 
 
 function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => void }) {
   const supabase = createClient()
+  const { showAlert, Dialog } = useDialog()
   const [tasas, setTasas] = useState<any[]>([])
   const [semanasGanaderas, setSemanasGanaderas] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
@@ -596,9 +684,9 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
          await supabase.from('tasas_bcv').upsert(bulk)
          logAction(supabase, user, 'Tasas BCV', 'IMPORTAR', `Importados ${bulk.length} registros de tasas`)
          load()
-         alert(`✅ ${bulk.length} tasas importadas con éxito.`)
+         showAlert(`${bulk.length} tasas importadas con éxito.`, { kind: 'success' })
        } else {
-         alert('Archivo vacío o formato incorrecto.')
+         showAlert('Archivo vacío o formato incorrecto.', { kind: 'error' })
        }
     }
     reader.readAsArrayBuffer(file)
@@ -732,6 +820,7 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
              </div>
           </div>
        )}
+    {Dialog}
     </div>
   )
 }
@@ -781,6 +870,7 @@ function CriosRow({ t, actualizarCrio }: { t: any, actualizarCrio: any }) {
 
 function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => void }) {
   const supabase = createClient()
+  const { showAlert, Dialog } = useDialog()
   const [crios, setCrios] = useState<any[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -850,9 +940,9 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
          await supabase.from('tabla_crioscopia').upsert(bulk)
          logAction(supabase, user, 'Crioscopía', 'IMPORTAR', `Importados ${bulk.length} puntos de crioscopía`)
          load()
-         alert(`✅ ${bulk.length} puntos crioscópicos importados.`)
+         showAlert(`${bulk.length} puntos crioscópicos importados.`, { kind: 'success' })
        } else {
-         alert('Archivo vacío o formato incorrecto.')
+         showAlert('Archivo vacío o formato incorrecto.', { kind: 'error' })
        }
     }
     reader.readAsArrayBuffer(file)
@@ -962,6 +1052,7 @@ function CrioscopiaTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: (
              </div>
           </div>
        )}
+    {Dialog}
     </div>
   )
 }
@@ -1004,6 +1095,7 @@ function MultiSelectGanaderos({ options, selected, onChange, disabled }: any) {
 }
 
 function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio, onSelect, isSelected, onCancel }: any) {
+  const { showAlert, Dialog: RowDialog } = useDialog()
   const [isEditing, setIsEditing] = useState(!p.id)
   const [lecheUSD, setLecheUSD] = useState(p.precio_leche_usd || 0)
   const [fleteUSD, setFleteUSD] = useState(p.precio_flete_usd || 0)
@@ -1025,8 +1117,8 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
   const totalBs = (Number(lecheUSD) + Number(fleteUSD)) * tasaBase
   const totalUSD = Number(lecheUSD) + Number(fleteUSD)
 
-  const handleSave = () => {
-     if (!grupoNombre || ganaderosStr.length === 0) return alert("Ingrese un Grupo y seleccione al menos un Ganadero")
+  const handleSave = async () => {
+     if (!grupoNombre || ganaderosStr.length === 0) { await showAlert('Ingrese un Grupo y seleccione al menos un Ganadero.', { kind: 'error' }); return }  // eslint-disable-line
      actualizarPrecio(p.id, { 
        grupo: grupoNombre,
        ganaderos: ganaderosStr,
@@ -1043,6 +1135,7 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
   const fleteBs = Number(fleteUSD) * tasaBase
 
   return (
+    <>
     <tr className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50/50' : ''}`}>
        <td className="no-export border border-slate-200 text-center py-2 px-2">
          {p.id && <input type="checkbox" checked={isSelected} onChange={(e) => onSelect(p.id, e.target.checked)} className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"/>}
@@ -1099,11 +1192,14 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
          )}
        </td>
     </tr>
+    {RowDialog}
+    </>
   )
 }
 
 function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => void }) {
   const supabase = createClient()
+  const { showConfirm, showAlert, Dialog } = useDialog()
   const tableRef = useRef<HTMLDivElement>(null)
   const importRef = useRef<HTMLInputElement>(null)
   const semanaDropdownRef = useRef<HTMLDivElement>(null)
@@ -1284,12 +1380,12 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
           ...payload,
           fecha_semana: selectedSemana
         })
-        if(error) return alert("Error al guardar: " + error.message)
+        if(error) { await showAlert('Error al guardar: ' + error.message, { kind: 'error' }); return }
         logAction(supabase, user, 'Precios', 'CREAR', `Añadido precio semanal para Grupo ${payload.grupo} en la semana ${formatDate(selectedSemana)}`)
         setIsAdding(false)
       } else {
         const { error } = await supabase.from('precios_semanales').update(payload).eq('id', id)
-        if(error) return alert("Error al guardar: " + error.message)
+        if(error) { await showAlert('Error al guardar: ' + error.message, { kind: 'error' }); return }
         logAction(supabase, user, 'Precios', 'EDITAR', `Actualizado precio semanal Grupo ${payload.grupo} (Semana ${formatDate(selectedSemana)})`)
       }
 
@@ -1304,7 +1400,8 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
    }
 
    const borrarPrecio = async (id: string, grupo: string) => {
-      if(!confirm("¿Borrar configuracion de precio?")) return
+      const ok = await showConfirm(`¿Borrar configuración de precio del grupo "${grupo}"?`, { danger: true, confirmLabel: 'Borrar' })
+      if (!ok) return
       await supabase.from('precios_semanales').delete().eq('id', id)
       logAction(supabase, user, 'Precios', 'BORRAR', `Eliminado registro de precios para el grupo ${grupo} de la semana ${formatDate(selectedSemana)}`)
       setPrecios(p => p.filter(x => x.id !== id))
@@ -1313,7 +1410,8 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
 
   const handleMassDelete = async () => {
     if (selectedRows.length === 0) return
-    if (!confirm(`¿Borrar ${selectedRows.length} registros seleccionados?`)) return
+    const ok = await showConfirm(`¿Borrar ${selectedRows.length} registros seleccionados?`, { danger: true, confirmLabel: 'Borrar todo' })
+    if (!ok) return
         await supabase.from('precios_semanales').delete().in('id', selectedRows)
      logAction(supabase, user, 'Precios', 'BORRAR_MASIVO', `Eliminados ${selectedRows.length} registros de precios en la semana ${formatDate(selectedSemana)}`)
      setPrecios(p => p.filter(x => !selectedRows.includes(x.id)))
@@ -1357,7 +1455,7 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
       link.href = dataUrl
       link.click()
     } catch (e) {
-      alert("Error exportando a imagen")
+      showAlert('Error al exportar como imagen.', { kind: 'error' })
       console.error(e)
     }
   }
@@ -1393,7 +1491,7 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
   }
 
   const handleConfirmarImportPrecios = async () => {
-    if (!selectedSemana) { alert('Selecciona una semana antes de importar.'); return }
+    if (!selectedSemana) { await showAlert('Selecciona una semana antes de importar.', { kind: 'error' }); return }
     setImportLoading(true)
     const errores: string[] = []
     let ok = 0
@@ -2078,6 +2176,7 @@ function FabricasTab({ user }: { user: any }) {
 // ─────────────────────────────────────────────────────────────────────────────
 function FacturacionConfigTab({ user }: { user: any }) {
   const supabase = createClient()
+  const { showConfirm, Dialog } = useDialog()
   const [deducciones, setDeducciones] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -2136,7 +2235,8 @@ function FacturacionConfigTab({ user }: { user: any }) {
   }
 
   const handleDelete = async (d: any) => {
-    if (!confirm(`¿Eliminar la deducción "${d.nombre}"?`)) return
+    const ok = await showConfirm(`¿Eliminar la deducción "${d.nombre}"?`, { danger: true, confirmLabel: 'Eliminar' })
+    if (!ok) return
     await supabase.from('deducciones_catalogo').delete().eq('id', d.id)
     logAction(supabase, user, 'Facturación', 'BORRAR_DEDUCCION', `Eliminada deducción Cód.${d.codigo}: ${d.nombre}`)
     loadDeds()
@@ -2250,6 +2350,7 @@ function FacturacionConfigTab({ user }: { user: any }) {
           </div>
         </div>
       )}
+    {Dialog}
     </div>
   )
 }
@@ -2286,6 +2387,7 @@ type SemanaStats = {
 
 function SemanasGanaderasTab({ user }: { user: any }) {
   const supabase = createClient()
+  const { showConfirm, showAlert, Dialog } = useDialog()
   const [semanas, setSemanas] = useState<SemanaGanadera[]>([])
   const [semStats, setSemStats] = useState<Record<string, SemanaStats>>({})
   const [loading, setLoading] = useState(false)
@@ -2408,7 +2510,7 @@ function SemanasGanaderasTab({ user }: { user: any }) {
   }
 
   async function handleToggleActiva(s: SemanaGanadera) {
-    if (s.es_vigente && s.activa) { alert('La semana vigente no puede desactivarse.'); return }
+    if (s.es_vigente && s.activa) { await showAlert('La semana vigente no puede desactivarse.', { kind: 'error' }); return }
     const { error } = await supabase.from('semanas_ganaderas').update({ activa: !s.activa }).eq('id', s.id)
     if (!error) {
       setSemanas(prev => prev.map(x => x.id === s.id ? { ...x, activa: !s.activa } : x))
@@ -2418,7 +2520,8 @@ function SemanasGanaderasTab({ user }: { user: any }) {
 
   async function handleMarcarVigente(s: SemanaGanadera) {
     if (s.es_vigente) return
-    if (!confirm(`¿Marcar Semana ${s.numero_semana} como vigente? Esto cambiará la semana preseleccionada en todo el sistema.`)) return
+    const ok = await showConfirm(`¿Marcar Semana ${s.numero_semana} como vigente? Esto cambiará la semana preseleccionada en todo el sistema.`, { title: 'Cambiar semana vigente', confirmLabel: 'Marcar vigente' })
+    if (!ok) return
     await supabase.from('semanas_ganaderas').update({ es_vigente: false }).neq('id', s.id)
     const { error } = await supabase.from('semanas_ganaderas').update({ es_vigente: true, activa: true }).eq('id', s.id)
     if (!error) {
@@ -2428,8 +2531,9 @@ function SemanasGanaderasTab({ user }: { user: any }) {
   }
 
   async function handleDelete(s: SemanaGanadera) {
-    if (s.es_vigente) { alert('No puedes eliminar la semana vigente.'); return }
-    if (!confirm(`¿Eliminar Semana ${s.numero_semana} (${formatRango(s.fecha_inicio)})?`)) return
+    if (s.es_vigente) { await showAlert('No puedes eliminar la semana vigente.', { kind: 'error' }); return }
+    const ok = await showConfirm(`¿Eliminar Semana ${s.numero_semana} (${formatRango(s.fecha_inicio)})?`, { danger: true, confirmLabel: 'Eliminar' })
+    if (!ok) return
     const { error } = await supabase.from('semanas_ganaderas').delete().eq('id', s.id)
     if (!error) {
       setSemanas(prev => prev.filter(x => x.id !== s.id))
@@ -2468,7 +2572,7 @@ function SemanasGanaderasTab({ user }: { user: any }) {
       const png = await toPng(statsRef.current, { cacheBust: true, backgroundColor: '#f8fafc' })
       const a = document.createElement('a'); a.href = png
       a.download = `semanas-ganaderas-${new Date().toISOString().substring(0, 10)}.png`; a.click()
-    } catch (e) { alert('Error al exportar imagen') }
+    } catch (e) { showAlert('Error al exportar imagen.', { kind: 'error' }) }
     setExportingImg(false)
   }
 
@@ -2794,6 +2898,7 @@ function SemanasGanaderasTab({ user }: { user: any }) {
           </div>
         </div>
       )}
+    {Dialog}
     </div>
   )
 }
