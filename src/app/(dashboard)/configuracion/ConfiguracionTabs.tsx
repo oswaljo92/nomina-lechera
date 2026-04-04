@@ -1,6 +1,7 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle } from 'lucide-react'
 import { toPng } from 'html-to-image'
@@ -1203,7 +1204,39 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
     const gruposConPrecio = new Set((precsData || []).map((p: any) => p.grupo))
     // 3. Ganaderos cuyo grupo no tiene precio en esta semana
     const sinP = (gans || []).filter((g: any) => !g.grupo || !gruposConPrecio.has(g.grupo))
-    setSinPrecio(sinP)
+    if (sinP.length === 0) { setSinPrecio([]); setSinPrecioLoading(false); return }
+
+    // 4. Calcular el martes fin de semana
+    const wedParts = semana.split('-')
+    const wed = new Date(parseInt(wedParts[0]), parseInt(wedParts[1])-1, parseInt(wedParts[2]))
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    const tueFmt = `${tue.getFullYear()}-${String(tue.getMonth()+1).padStart(2,'0')}-${String(tue.getDate()).padStart(2,'0')}`
+
+    // 5. Buscar recepciones de esos ganaderos en el rango de la semana
+    const ids = sinP.map((g: any) => g.id)
+    const { data: recs } = await supabase
+      .from('recepciones_detalle')
+      .select('ganadero_id, litros_recepcion, recepciones_camion(fecha_ingreso)')
+      .in('ganadero_id', ids)
+      .gte('recepciones_camion.fecha_ingreso', semana)
+      .lte('recepciones_camion.fecha_ingreso', tueFmt + 'T23:59:59')
+
+    // 6. Sumar litros por ganadero
+    const litrosMap = new Map<string, number>()
+    for (const r of recs || []) {
+      if (!r.recepciones_camion?.fecha_ingreso) continue
+      const fecha = r.recepciones_camion.fecha_ingreso.substring(0, 10)
+      if (fecha >= semana && fecha <= tueFmt) {
+        litrosMap.set(r.ganadero_id, (litrosMap.get(r.ganadero_id) || 0) + Number(r.litros_recepcion || 0))
+      }
+    }
+
+    // 7. Adjuntar litros y ordenar: con litros primero
+    const sinPConLitros = sinP
+      .map((g: any) => ({ ...g, litrosSemana: litrosMap.get(g.id) || 0 }))
+      .sort((a: any, b: any) => b.litrosSemana - a.litrosSemana)
+
+    setSinPrecio(sinPConLitros)
     setSinPrecioLoading(false)
   }
 
@@ -1638,14 +1671,16 @@ CREATE TABLE precios_semanales (
                    <th className="text-left text-[10px] font-black text-amber-500 uppercase tracking-widest px-4 py-2">Grupo asignado</th>
                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Ruta</th>
                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Fábrica</th>
+                   <th className="text-right text-[10px] font-black text-red-500 uppercase tracking-widest px-4 py-2">Litros sem.</th>
                  </tr>
                </thead>
                <tbody>
                  {sinPrecio.map((g: any) => {
                    const ruta = Array.isArray(g.rutas) ? g.rutas[0] : g.rutas
                    const fabrica = ruta?.fabricas
+                   const tienelitros = g.litrosSemana > 0
                    return (
-                     <tr key={g.id} className="border-b border-slate-50 hover:bg-amber-50 transition-colors">
+                     <tr key={g.id} className={`border-b border-slate-50 transition-colors ${tienelitros ? 'hover:bg-red-50' : 'hover:bg-slate-50 opacity-60'}`}>
                        <td className="px-4 py-2.5 font-black text-slate-700">{g.codigo_ganadero}</td>
                        <td className="px-4 py-2.5 font-semibold text-slate-700">{g.nombre}</td>
                        <td className="px-4 py-2.5">
@@ -1656,6 +1691,12 @@ CREATE TABLE precios_semanales (
                        </td>
                        <td className="px-4 py-2.5 text-slate-500 text-xs font-semibold">{ruta?.nombre_ruta || '—'}</td>
                        <td className="px-4 py-2.5 text-slate-500 text-xs font-semibold">{fabrica ? `${fabrica.codigo} · ${fabrica.nombre}` : '—'}</td>
+                       <td className="px-4 py-2.5 text-right">
+                         {tienelitros
+                           ? <span className="font-black text-red-600">{Math.round(g.litrosSemana).toLocaleString('es-VE')} L</span>
+                           : <span className="text-slate-300 font-semibold text-xs">sin recep.</span>
+                         }
+                       </td>
                      </tr>
                    )
                  })}
@@ -2225,7 +2266,8 @@ function VitacoraTab({ user }: { user: any }) {
 
 export default function ConfiguracionTabs({ initialRol }: { initialRol: string }) {
   const supabase = createClient()
-  const [tab, setTab] = useState('usuarios')
+  const searchParams = useSearchParams()
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'usuarios')
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [bitacoraModal, setBitacoraModal] = useState<{ open: boolean, modulo: string }>({ open: false, modulo: '' })
 

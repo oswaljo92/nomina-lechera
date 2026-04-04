@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo } from 'react'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
   Loader2, TrendingUp, Filter, DollarSign, Users,
@@ -741,7 +742,7 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {f.litrosSinPrecio > 0
-                        ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</span>
+                        ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</Link>
                         : <span className="text-emerald-500 font-black text-xs">✓ 0%</span>}
                     </td>
                   </tr>
@@ -756,7 +757,7 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(4)}</td>
                     <td className="py-2.5 pl-4 text-right">
-                      {(() => { const s = financialsByFactoryRecibido.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactoryRecibido.reduce((a,f)=>a+f.litros,0); return s > 0 ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</span> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
+                      {(() => { const s = financialsByFactoryRecibido.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactoryRecibido.reduce((a,f)=>a+f.litros,0); return s > 0 ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</Link> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
                     </td>
                   </tr>
                 </tfoot>
@@ -796,7 +797,7 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
                     <td className="py-2.5 pl-4 text-right">
                       {f.litrosSinPrecio > 0
-                        ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</span>
+                        ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</Link>
                         : <span className="text-emerald-500 font-black text-xs">✓ 0%</span>}
                     </td>
                   </tr>
@@ -811,7 +812,7 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-orange-800">${financials.pppFleteUSD.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(4)}</td>
                     <td className="py-2.5 pl-4 text-right">
-                      {(() => { const s = financialsByFactory.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactory.reduce((a,f)=>a+f.litros,0); return s > 0 ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</span> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
+                      {(() => { const s = financialsByFactory.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactory.reduce((a,f)=>a+f.litros,0); return s > 0 ? <Link href="/configuracion?tab=precios" className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200 hover:bg-red-100 transition-colors">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</Link> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
                     </td>
                   </tr>
                 </tfoot>
