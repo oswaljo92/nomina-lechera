@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -140,6 +140,8 @@ export default function DashboardPage() {
 
   const [pppMode, setPppMode] = useState<'recibido' | 'pagado'>('recibido')
   const [selectedSemanaPPP, setSelectedSemanaPPP] = useState('')
+  const [semanaPPPDropdownOpen, setSemanaPPPDropdownOpen] = useState(false)
+  const semanaPPPDropdownRef = useRef<HTMLDivElement>(null)
   const [showGanaderoDetalle, setShowGanaderoDetalle] = useState(false)
 
   const [showQuality, setShowQuality] = useState({
@@ -547,6 +549,16 @@ export default function DashboardPage() {
     }
   }, [semanasDisponibles])
 
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (semanaPPPDropdownRef.current && !semanaPPPDropdownRef.current.contains(e.target as Node)) {
+        setSemanaPPPDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
   // ── Volumen vs Precios mejorado ────────────────────────────────────────────
   const volPrecData = useMemo(() => {
     const empty = diasSemana.map(dia => ({ name: dia, Litros: 0, PrecioLeche: 0, PrecioFlete: 0, PrecioTotal: 0, PrecioTotalBs: 0 }))
@@ -606,7 +618,16 @@ export default function DashboardPage() {
     const wed = new Date(wedStr + 'T12:00:00')
     const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
     const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
-    return `${fmt(wed)} - ${fmt(tue)}`
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+  function getNumeroSemana(wedStr: string): number {
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+    const jan1 = new Date(wed.getFullYear(), 0, 1)
+    const daysBack = (jan1.getDay() - 3 + 7) % 7
+    const firstWed = new Date(jan1); firstWed.setDate(jan1.getDate() - daysBack)
+    const weekNum = Math.round((wed.getTime() - firstWed.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return weekNum > 0 ? weekNum : 1
   }
 
   if (isLoading) return (
@@ -658,18 +679,53 @@ export default function DashboardPage() {
         <div className="flex items-center gap-2">
           <Calculator size={15} className="text-slate-400" />
           <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Semana PPP</span>
-          <select
-            value={selectedSemanaPPP}
-            onChange={e => setSelectedSemanaPPP(e.target.value)}
-            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500"
-          >
-            {semanasDisponibles.map(s => {
-              const wed = new Date(s + 'T12:00:00')
-              const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
-              const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
-              return <option key={s} value={s}>Mié {fmt(wed)} – Mar {fmt(tue)}/{tue.getFullYear()}</option>
-            })}
-          </select>
+          <div className="relative" ref={semanaPPPDropdownRef}>
+            <button
+              type="button"
+              onClick={() => setSemanaPPPDropdownOpen(o => !o)}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-xl transition-colors select-none"
+            >
+              {selectedSemanaPPP ? (
+                <>
+                  <span className="text-[10px] font-black uppercase">Sem</span>
+                  <span className="text-lg font-black leading-none">{getNumeroSemana(selectedSemanaPPP)}</span>
+                  <span className="text-xs font-bold">{formatSemanaLabel(selectedSemanaPPP)}</span>
+                </>
+              ) : (
+                <span className="text-xs font-bold">Sin semanas</span>
+              )}
+              <svg className={`w-3 h-3 ml-1 transition-transform duration-200 ${semanaPPPDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {semanaPPPDropdownOpen && semanasDisponibles.length > 0 && (
+              <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden" style={{ zIndex: 9999, minWidth: '280px' }}>
+                <div className="max-h-72 overflow-y-auto">
+                  {semanasDisponibles.map(s => {
+                    const isSelected = s === selectedSemanaPPP
+                    return (
+                      <button
+                        key={s}
+                        type="button"
+                        onMouseDown={e => {
+                          e.preventDefault()
+                          setSelectedSemanaPPP(s)
+                          setSemanaPPPDropdownOpen(false)
+                        }}
+                        className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'}`}
+                      >
+                        <div className="min-w-0">
+                          <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
+                            Semana {getNumeroSemana(s)}
+                          </div>
+                          <div className="text-[10px] text-gray-700 mt-0.5">{formatSemanaLabel(s)}</div>
+                        </div>
+                        {isSelected && <svg className="w-4 h-4 text-blue-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div className="w-px h-5 bg-slate-200" />
         <div className="flex items-center gap-3">
@@ -944,30 +1000,32 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* ── GRÁFICO VOLUMEN SEMANAL ── */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
-        <h3 className="font-bold text-slate-700 mb-6 text-base sm:text-lg flex items-center gap-2">
-          <Activity size={18} className="text-blue-500" />
-          Volumen Semanal de Leche (Miércoles a Martes)
-        </h3>
-        <div className="h-64 sm:h-80 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={litrosSemanaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorLitros" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-              <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)' }} />
-              <Area type="monotone" dataKey="Litros" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorLitros)" activeDot={{ r: 8, fill: '#3b82f6' }} />
-            </AreaChart>
-          </ResponsiveContainer>
+      {/* ── GRÁFICO VOLUMEN SEMANAL ── solo visible cuando hay semana PPP seleccionada */}
+      {selectedSemanaPPP && (
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+          <h3 className="font-bold text-slate-700 mb-6 text-base sm:text-lg flex items-center gap-2">
+            <Activity size={18} className="text-blue-500" />
+            Volumen Semanal de Leche (Miércoles a Martes)
+          </h3>
+          <div className="h-64 sm:h-80 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={litrosSemanaData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorLitros" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)' }} />
+                <Area type="monotone" dataKey="Litros" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorLitros)" activeDot={{ r: 8, fill: '#3b82f6' }} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── TORTAS + BCV ── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
