@@ -137,12 +137,13 @@ export default function DashboardPage() {
   const [preciosSemanales, setPreciosSemanales] = useState<any[]>([])
   const [semanasGanaderas, setSemanasGanaderas] = useState<{ fecha_inicio: string; numero_semana: number; es_vigente: boolean }[]>([])
   const [selectedSemanaChart, setSelectedSemanaChart] = useState('')
-  const [selectedBcvSemana, setSelectedBcvSemana] = useState('')
 
   const [pppMode, setPppMode] = useState<'recibido' | 'pagado'>('recibido')
   const [selectedSemanaPPP, setSelectedSemanaPPP] = useState('')
   const [semanaPPPDropdownOpen, setSemanaPPPDropdownOpen] = useState(false)
   const semanaPPPDropdownRef = useRef<HTMLDivElement>(null)
+  const [bcvDropdownOpen, setBcvDropdownOpen] = useState(false)
+  const bcvDropdownRef = useRef<HTMLDivElement>(null)
   const [showGanaderoDetalle, setShowGanaderoDetalle] = useState(false)
 
   const [showQuality, setShowQuality] = useState({
@@ -176,7 +177,7 @@ export default function DashboardPage() {
         supabase.from('recepciones_detalle').select(`
           *,
           recepciones_camion ( fecha_ingreso, fabrica_id ),
-          ganaderos ( tipo_proveedor, grupo, codigo_ganadero )
+          ganaderos ( tipo_proveedor, grupo, codigo_ganadero, nombre )
         `),
         supabase.from('recepciones_camion').select('id, litros_romana, fabrica_id, fecha_ingreso'),
         supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true }),
@@ -427,7 +428,7 @@ export default function DashboardPage() {
   // ── PPP detalle por ganadero (recibido) ───────────────────────────────────
   const pppByGanadero = useMemo(() => {
     const map = new Map<string, {
-      codigo: string, grupo: string,
+      codigo: string, nombre: string, grupo: string,
       litros: number, sumLeche: number, sumFlete: number,
       litsLeche: number, litsFlete: number, litsTotal: number,
       sinPrecio: boolean
@@ -447,6 +448,7 @@ export default function DashboardPage() {
       if (!map.has(gId)) {
         map.set(gId, {
           codigo: r.ganaderos?.codigo_ganadero || String(gId).slice(0, 8),
+          nombre: r.ganaderos?.nombre || '—',
           grupo: grupo || '—',
           litros: 0, sumLeche: 0, sumFlete: 0,
           litsLeche: 0, litsFlete: 0, litsTotal: 0,
@@ -547,23 +549,10 @@ export default function DashboardPage() {
   }), [recFilteredPPP])
 
   // ── BCV: semanas disponibles y datos diarios ───────────────────────────────
-  const bcvSemanasDispo = useMemo(() => {
-    const weeks = new Set<string>()
-    for (const t of tasas) weeks.add(getWednesdayOfWeek(t.fecha))
-    return Array.from(weeks).sort((a, b) => b.localeCompare(a))
-  }, [tasas])
-
-  useEffect(() => {
-    if (bcvSemanasDispo.length > 0 && !selectedBcvSemana) {
-      const currentWed = getCurrentWednesday()
-      setSelectedBcvSemana(bcvSemanasDispo.includes(currentWed) ? currentWed : bcvSemanasDispo[0])
-    }
-  }, [bcvSemanasDispo])
-
   const bcvDiariaData = useMemo(() => {
-    if (!selectedBcvSemana) return []
+    if (!selectedSemanaPPP) return []
     const diasNombres = ['Mié', 'Jue', 'Vie', 'Sáb', 'Dom', 'Lun', 'Mar']
-    const wedObj = new Date(selectedBcvSemana + 'T12:00:00')
+    const wedObj = new Date(selectedSemanaPPP + 'T12:00:00')
     return diasNombres.map((dia, i) => {
       const d = new Date(wedObj)
       d.setDate(wedObj.getDate() + i)
@@ -573,7 +562,21 @@ export default function DashboardPage() {
         Tasa: tasaMap.get(fechaStr) ?? null,
       }
     })
-  }, [selectedBcvSemana, tasaMap])
+  }, [selectedSemanaPPP, tasaMap])
+
+  const bcvSemanaAnteriorTasa = useMemo(() => {
+    if (!selectedSemanaPPP) return null
+    const prevWed = new Date(selectedSemanaPPP + 'T12:00:00')
+    prevWed.setDate(prevWed.getDate() - 7)
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(prevWed)
+      d.setDate(prevWed.getDate() + i)
+      const fechaStr = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+      const t = tasaMap.get(fechaStr)
+      if (t != null) return t
+    }
+    return null
+  }, [selectedSemanaPPP, tasaMap])
 
   // ── Semanas disponibles ────────────────────────────────────────────────────
   // Si hay semanas_ganaderas activas, úsalas. Si no (tabla no configurada aún),
@@ -607,6 +610,9 @@ export default function DashboardPage() {
     const handler = (e: MouseEvent) => {
       if (semanaPPPDropdownRef.current && !semanaPPPDropdownRef.current.contains(e.target as Node)) {
         setSemanaPPPDropdownOpen(false)
+      }
+      if (bcvDropdownRef.current && !bcvDropdownRef.current.contains(e.target as Node)) {
+        setBcvDropdownOpen(false)
       }
     }
     document.addEventListener('mousedown', handler)
@@ -1017,7 +1023,8 @@ export default function DashboardPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50">
-                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Cód. Proveedor</th>
+                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Cód.</th>
+                    <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Ganadero</th>
                     <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Grupo</th>
                     <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Recepción Lts</th>
                     <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest px-4 py-2">Leche</th>
@@ -1029,6 +1036,7 @@ export default function DashboardPage() {
                   {pppByGanadero.map((g, i) => (
                     <tr key={i} className={`border-b border-slate-50 transition-colors ${g.sinPrecio ? 'bg-red-50 hover:bg-red-100' : 'hover:bg-slate-50'}`}>
                       <td className="px-4 py-2 font-black text-slate-700">{g.codigo}</td>
+                      <td className="px-4 py-2 text-xs font-semibold text-slate-700">{g.nombre}</td>
                       <td className="px-4 py-2 text-xs font-semibold text-slate-500">{g.grupo}</td>
                       <td className="px-4 py-2 text-right font-semibold text-slate-600">{Math.round(g.litros).toLocaleString('es-VE')}</td>
                       <td className="px-4 py-2 text-right font-black text-teal-700">
@@ -1045,7 +1053,7 @@ export default function DashboardPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td className="px-4 py-2.5 font-black text-slate-800" colSpan={2}>
+                    <td className="px-4 py-2.5 font-black text-slate-800" colSpan={3}>
                       Total ({pppByGanadero.length} ganaderos)
                     </td>
                     <td className="px-4 py-2.5 text-right font-black text-slate-700">
@@ -1127,15 +1135,59 @@ export default function DashboardPage() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 flex flex-col">
           <div className="flex items-center justify-between mb-1 gap-2">
             <h3 className="font-bold text-slate-500 text-sm uppercase tracking-widest">Fluctuación Tasa BCV</h3>
-            <select
-              value={selectedBcvSemana}
-              onChange={e => setSelectedBcvSemana(e.target.value)}
-              className="border border-slate-200 bg-slate-50 text-slate-700 font-bold rounded-lg px-2 py-1 text-[10px] focus:ring-2 focus:ring-amber-400 cursor-pointer"
-            >
-              {bcvSemanasDispo.map(s => (
-                <option key={s} value={s}>{formatSemanaLabel(s)}</option>
-              ))}
-            </select>
+            <div className="relative" ref={bcvDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setBcvDropdownOpen(o => !o)}
+                className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl transition-colors select-none"
+              >
+                {selectedSemanaPPP ? (() => {
+                  const sg = semanasGanaderas.find(x => x.fecha_inicio === selectedSemanaPPP)
+                  const num = sg?.numero_semana ?? getNumeroSemana(selectedSemanaPPP)
+                  return (
+                    <>
+                      <span className="text-[10px] font-black uppercase">Sem</span>
+                      <span className="text-base font-black leading-none">{num}</span>
+                      <span className="text-[10px] font-bold">{formatSemanaLabel(selectedSemanaPPP)}</span>
+                    </>
+                  )
+                })() : <span className="text-xs font-bold">Sin semanas</span>}
+                <svg className={`w-3 h-3 ml-1 transition-transform duration-200 ${bcvDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
+              </button>
+              {bcvDropdownOpen && semanasDisponibles.length > 0 && (
+                <div className="absolute top-full right-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden" style={{ zIndex: 9999, minWidth: '260px' }}>
+                  <div className="max-h-72 overflow-y-auto">
+                    {semanasDisponibles.map(s => {
+                      const isSelected = s === selectedSemanaPPP
+                      const sgEntry = semanasGanaderas.find(x => x.fecha_inicio === s)
+                      const isVigente = sgEntry?.es_vigente ?? false
+                      const numSem = sgEntry?.numero_semana ?? getNumeroSemana(s)
+                      return (
+                        <button
+                          key={s}
+                          type="button"
+                          onMouseDown={e => {
+                            e.preventDefault()
+                            setSelectedSemanaPPP(s)
+                            setBcvDropdownOpen(false)
+                          }}
+                          className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-amber-50 hover:bg-amber-100' : 'bg-white hover:bg-gray-50'}`}
+                        >
+                          <div className="min-w-0">
+                            <div className={`text-xs font-bold leading-tight flex items-center gap-1.5 ${isSelected ? 'text-amber-700' : 'text-gray-900'}`}>
+                              Semana {numSem}
+                              {isVigente && <span className="text-[9px] bg-amber-500 text-white px-1.5 py-0.5 rounded font-black">VIGENTE</span>}
+                            </div>
+                            <div className="text-[10px] text-gray-700 mt-0.5">{formatSemanaLabel(s)}</div>
+                          </div>
+                          {isSelected && <svg className="w-4 h-4 text-amber-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <p className="text-center text-[9px] text-slate-400 font-semibold mb-2">Tasa diaria Bs/$</p>
           <div className="h-52">
@@ -1159,14 +1211,21 @@ export default function DashboardPage() {
           </div>
           {(() => {
             const inicioTasa = bcvDiariaData[0]?.Tasa
-            const ultimaTasa = [...bcvDiariaData].reverse().find(d => d.Tasa !== null)?.Tasa
+            const variacion = inicioTasa != null && bcvSemanaAnteriorTasa != null
+              ? ((inicioTasa - bcvSemanaAnteriorTasa) / bcvSemanaAnteriorTasa) * 100
+              : null
             return (
               <div className="flex justify-center gap-4 mt-1 flex-wrap">
                 <span className="text-[9px] font-semibold text-slate-400">
                   Inicio sem. (Mié): <span className="text-blue-600 font-black">{inicioTasa != null ? `${inicioTasa.toFixed(3)} Bs/$` : '—'}</span>
                 </span>
                 <span className="text-[9px] font-semibold text-slate-400">
-                  Último día: <span className="text-amber-600 font-black">{ultimaTasa != null ? `${ultimaTasa.toFixed(3)} Bs/$` : '—'}</span>
+                  Sem. anterior: <span className="text-slate-600 font-black">{bcvSemanaAnteriorTasa != null ? `${bcvSemanaAnteriorTasa.toFixed(3)} Bs/$` : '—'}</span>
+                  {variacion != null && (
+                    <span className={`ml-1 font-black ${variacion >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {variacion >= 0 ? '▲' : '▼'}{Math.abs(variacion).toFixed(2)}%
+                    </span>
+                  )}
                 </span>
               </div>
             )
