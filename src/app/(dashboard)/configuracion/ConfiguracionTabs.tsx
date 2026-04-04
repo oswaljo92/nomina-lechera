@@ -1224,8 +1224,10 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
     // 6. Sumar litros por ganadero
     const litrosMap = new Map<string, number>()
     for (const r of recs || []) {
-      if (!r.recepciones_camion?.fecha_ingreso) continue
-      const fecha = r.recepciones_camion.fecha_ingreso.substring(0, 10)
+      const camion = Array.isArray(r.recepciones_camion) ? r.recepciones_camion[0] : r.recepciones_camion
+      const fechaIngreso: string | undefined = (camion as any)?.fecha_ingreso
+      if (!fechaIngreso) continue
+      const fecha = fechaIngreso.substring(0, 10)
       if (fecha >= semana && fecha <= tueFmt) {
         litrosMap.set(r.ganadero_id, (litrosMap.get(r.ganadero_id) || 0) + Number(r.litros_recepcion || 0))
       }
