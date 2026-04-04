@@ -2335,14 +2335,14 @@ function SemanasGanaderasTab({ user }: { user: any }) {
 
   async function fetchSemanas() {
     setLoading(true)
+    // order('fecha_inicio') falla con error en PostgREST si la columna no existe
+    // (esquema antiguo tiene 'fecha' en vez de 'fecha_inicio').
     const { data, error } = await supabase
       .from('semanas_ganaderas')
       .select('*')
       .order('fecha_inicio', { ascending: false })
     if (error) { setDbError(true); setLoading(false); return }
-    // Check new schema: if records lack fecha_inicio, treat as old schema
-    if (data && data.length > 0 && !('fecha_inicio' in data[0])) { setDbError(true); setLoading(false); return }
-    setSemanas(data || [])
+    setSemanas((data || []) as SemanaGanadera[])
     setDbError(false)
     setLoading(false)
   }
@@ -2475,11 +2475,8 @@ function SemanasGanaderasTab({ user }: { user: any }) {
   const vigente = semanas.find(s => s.es_vigente)
   const filtradas = filtro === 'activas' ? semanas.filter(s => s.activa) : semanas
 
-  const SQL_SETUP = `-- Ejecuta esto en Supabase SQL Editor (una sola vez)
--- Si ya existe una tabla semanas_ganaderas con esquema antiguo, ejecuta primero:
--- DROP TABLE IF EXISTS semanas_ganaderas;
-
-CREATE TABLE IF NOT EXISTS semanas_ganaderas (
+  const SQL_PASO1 = `DROP TABLE IF EXISTS semanas_ganaderas;`
+  const SQL_PASO2 = `CREATE TABLE semanas_ganaderas (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   fecha_inicio DATE NOT NULL UNIQUE,
   numero_semana INTEGER NOT NULL,
@@ -2493,16 +2490,48 @@ CREATE TABLE IF NOT EXISTS semanas_ganaderas (
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500 w-10 h-10" /></div>
 
   if (dbError) return (
-    <div className="space-y-4">
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-        <div className="flex items-center gap-2 mb-3">
+    <div className="space-y-6">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-2">
           <AlertTriangle size={20} className="text-amber-500" />
-          <h3 className="font-black text-amber-800">Configuración inicial requerida</h3>
+          <h3 className="font-black text-amber-800">Actualización de tabla requerida</h3>
         </div>
-        <p className="text-sm text-amber-700 mb-4">La tabla <code className="bg-amber-100 px-1 rounded">semanas_ganaderas</code> no existe o tiene un esquema anterior. Ejecuta este SQL en tu Supabase:</p>
-        <pre className="text-xs bg-white border border-amber-200 p-4 rounded-xl overflow-x-auto text-slate-800 mb-4">{SQL_SETUP}</pre>
-        <button onClick={fetchSemanas} className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 transition-colors">
-          <RefreshCcw size={16} /> Verificar tabla
+        <p className="text-sm text-amber-700">
+          La tabla <code className="bg-amber-100 px-1 rounded font-mono">semanas_ganaderas</code> existe con un esquema anterior.
+          Debes ejecutar los siguientes 2 pasos en el <strong>SQL Editor de Supabase</strong>:
+        </p>
+
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1.5">Paso 1 — Eliminar tabla antigua</p>
+            <div className="relative">
+              <pre className="text-xs bg-white border border-amber-200 p-3 rounded-xl text-slate-800 font-mono">{SQL_PASO1}</pre>
+              <button onClick={() => navigator.clipboard.writeText(SQL_PASO1)}
+                className="absolute top-2 right-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold hover:bg-amber-200 transition-colors">
+                Copiar
+              </button>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1.5">Paso 2 — Crear tabla nueva</p>
+            <div className="relative">
+              <pre className="text-xs bg-white border border-amber-200 p-3 rounded-xl text-slate-800 font-mono overflow-x-auto">{SQL_PASO2}</pre>
+              <button onClick={() => navigator.clipboard.writeText(SQL_PASO2)}
+                className="absolute top-2 right-2 text-[10px] bg-amber-100 text-amber-700 px-2 py-1 rounded font-bold hover:bg-amber-200 transition-colors">
+                Copiar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-amber-100 rounded-xl p-3 text-xs text-amber-800 font-semibold">
+          ⚠ La tabla antigua solo contiene datos de referencia para etiquetas — no afecta recepciones, precios ni tasas.
+          Después del DROP podrás reimportar las semanas con el botón "Importar existentes".
+        </div>
+
+        <button onClick={fetchSemanas}
+          className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 transition-colors">
+          <RefreshCcw size={16} /> Verificar (después de ejecutar los 2 pasos)
         </button>
       </div>
     </div>
