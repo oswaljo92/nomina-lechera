@@ -138,6 +138,7 @@ export default function DashboardPage() {
   const [selectedBcvSemana, setSelectedBcvSemana] = useState('')
 
   const [pppMode, setPppMode] = useState<'recibido' | 'pagado'>('recibido')
+  const [selectedSemanaPPP, setSelectedSemanaPPP] = useState('')
 
   const [showQuality, setShowQuality] = useState({
     Grasa: true, Proteina: true, Temperatura: true, Crioscopia: false
@@ -205,24 +206,35 @@ export default function DashboardPage() {
   const tasaMap = useMemo(() => new Map(tasas.map(t => [t.fecha, Number(t.tasa)])), [tasas])
   const lastTasa = useMemo(() => tasas.length > 0 ? Number(tasas[tasas.length - 1].tasa) : 40, [tasas])
 
+  // ── Filtro semana PPP ──────────────────────────────────────────────────────
+  const recFilteredPPP = useMemo(() => {
+    if (!selectedSemanaPPP) return recFiltered
+    return recFiltered.filter(r => {
+      const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) return false
+      return getWednesdayOfWeek(fechaStr) === selectedSemanaPPP
+    })
+  }, [recFiltered, selectedSemanaPPP])
+
   // ── KPIs básicos ───────────────────────────────────────────────────────────
-  const totalLitros = useMemo(() => recFiltered.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFiltered])
+  const totalLitros = useMemo(() => recFilteredPPP.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFilteredPPP])
   const proveedoresActivos = useMemo(() => new Set(recFiltered.map(r => r.ganadero_id)).size, [recFiltered])
 
-  // ── KPIs financieros ───────────────────────────────────────────────────────
+  // ── KPIs financieros (pagado: litros_a_pagar estricto) ────────────────────
   const financials = useMemo(() => {
     let sumLecheUSD = 0, sumFleteUSD = 0
     let sumLecheBs = 0, sumFleteBs = 0
-    // Acumuladores separados: solo litros con precio > 0 en cada componente
     let sumLitsLeche = 0, sumLitsFlete = 0, sumLitsTotal = 0
 
-    for (const r of recFiltered) {
+    for (const r of recFilteredPPP) {
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
       if (!fechaStr) continue
       const wedStr = getWednesdayOfWeek(fechaStr)
       const grupo = r.ganaderos?.grupo
       const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
-      const litros = Number(r.litros_a_pagar || r.litros_recepcion || 0)
+      // Modo pagado: solo litros_a_pagar, sin fallback
+      const litros = Number(r.litros_a_pagar || 0)
+      if (litros === 0) continue
       const tasa = tasaMap.get(fechaStr) ?? lastTasa
       const precioLeche = Number(precio?.precio_leche_usd || 0)
       const precioFlete = Number(precio?.precio_flete_usd || 0)
@@ -231,7 +243,6 @@ export default function DashboardPage() {
       sumFleteUSD += litros * precioFlete
       sumLecheBs += litros * precioLeche * tasa
       sumFleteBs += litros * precioFlete * tasa
-      // Solo acumular litros al denominador si el componente tiene precio asignado
       if (precioLeche > 0) sumLitsLeche += litros
       if (precioFlete > 0) sumLitsFlete += litros
       if (precioLeche > 0 || precioFlete > 0) sumLitsTotal += litros
@@ -248,15 +259,15 @@ export default function DashboardPage() {
       totalFleteUSD: sumFleteUSD,
       totalFleteBs: sumFleteBs,
     }
-  }, [recFiltered, preciosSemanales, tasaMap, lastTasa])
+  }, [recFilteredPPP, preciosSemanales, tasaMap, lastTasa])
 
-  // ── PPP por fábrica ────────────────────────────────────────────────────────
+  // ── PPP por fábrica (pagado) ───────────────────────────────────────────────
   const financialsByFactory = useMemo(() => {
     const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
     for (const f of fabricas) {
       map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
     }
-    for (const r of recepciones) {
+    for (const r of recFilteredPPP) {
       const fabId = r.recepciones_camion?.fabrica_id
       if (!fabId || !map.has(fabId)) continue
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
@@ -264,7 +275,8 @@ export default function DashboardPage() {
       const wedStr = getWednesdayOfWeek(fechaStr)
       const grupo = r.ganaderos?.grupo
       const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
-      const litros = Number(r.litros_a_pagar || r.litros_recepcion || 0)
+      const litros = Number(r.litros_a_pagar || 0)
+      if (litros === 0) continue
       const precioLeche = Number(precio?.precio_leche_usd || 0)
       const precioFlete = Number(precio?.precio_flete_usd || 0)
       const entry = map.get(fabId)!
@@ -285,29 +297,26 @@ export default function DashboardPage() {
         pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
       }))
       .filter(f => f.litros > 0)
-  }, [recepciones, fabricas, preciosSemanales, tasaMap, lastTasa])
+  }, [recFilteredPPP, fabricas, preciosSemanales])
 
   // ── PPP recibido (litros_recepcion) ───────────────────────────────────────
   const financialsRecibido = useMemo(() => {
     let sumLecheUSD = 0, sumFleteUSD = 0
-    let sumLecheBs = 0, sumFleteBs = 0
     let sumLitsLeche = 0, sumLitsFlete = 0, sumLitsTotal = 0
 
-    for (const r of recFiltered) {
+    for (const r of recFilteredPPP) {
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
       if (!fechaStr) continue
       const wedStr = getWednesdayOfWeek(fechaStr)
       const grupo = r.ganaderos?.grupo
       const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
       const litros = Number(r.litros_recepcion || 0)
-      const tasa = tasaMap.get(fechaStr) ?? lastTasa
+      if (litros === 0) continue
       const precioLeche = Number(precio?.precio_leche_usd || 0)
       const precioFlete = Number(precio?.precio_flete_usd || 0)
 
       sumLecheUSD += litros * precioLeche
       sumFleteUSD += litros * precioFlete
-      sumLecheBs += litros * precioLeche * tasa
-      sumFleteBs += litros * precioFlete * tasa
       if (precioLeche > 0) sumLitsLeche += litros
       if (precioFlete > 0) sumLitsFlete += litros
       if (precioLeche > 0 || precioFlete > 0) sumLitsTotal += litros
@@ -317,16 +326,16 @@ export default function DashboardPage() {
       pppLecheUSD: sumLitsLeche > 0 ? sumLecheUSD / sumLitsLeche : 0,
       pppFleteUSD: sumLitsFlete > 0 ? sumFleteUSD / sumLitsFlete : 0,
       pppTotalUSD: sumLitsTotal > 0 ? (sumLecheUSD + sumFleteUSD) / sumLitsTotal : 0,
-      totalLitros: recFiltered.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0),
+      totalLitros: recFilteredPPP.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0),
     }
-  }, [recFiltered, preciosSemanales, tasaMap, lastTasa])
+  }, [recFilteredPPP, preciosSemanales, tasaMap, lastTasa])
 
   const financialsByFactoryRecibido = useMemo(() => {
     const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
     for (const f of fabricas) {
       map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
     }
-    for (const r of recepciones) {
+    for (const r of recFilteredPPP) {
       const fabId = r.recepciones_camion?.fabrica_id
       if (!fabId || !map.has(fabId)) continue
       const fechaStr = r.recepciones_camion?.fecha_ingreso?.substring(0, 10)
@@ -335,6 +344,7 @@ export default function DashboardPage() {
       const grupo = r.ganaderos?.grupo
       const precio = preciosSemanales.find(p => p.fecha_semana === wedStr && p.grupo === grupo)
       const litros = Number(r.litros_recepcion || 0)
+      if (litros === 0) continue
       const precioLeche = Number(precio?.precio_leche_usd || 0)
       const precioFlete = Number(precio?.precio_flete_usd || 0)
       const entry = map.get(fabId)!
@@ -355,7 +365,7 @@ export default function DashboardPage() {
         pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
       }))
       .filter(f => f.litros > 0)
-  }, [recepciones, fabricas, preciosSemanales])
+  }, [recFilteredPPP, fabricas, preciosSemanales])
 
   // ── KPIs de calidad ────────────────────────────────────────────────────────
   const qualityMetrics = useMemo(() => {
@@ -470,14 +480,16 @@ export default function DashboardPage() {
   }, [tasas, preciosSemanales])
 
   useEffect(() => {
-    if (semanasDisponibles.length > 0 && !selectedSemanaChart) {
+    if (semanasDisponibles.length > 0 && (!selectedSemanaChart || !selectedSemanaPPP)) {
       const now = new Date()
       const day = now.getDay()
       const diff = (day < 3 ? 7 : 0) + day - 3
       const wed = new Date(now)
       wed.setDate(now.getDate() - diff)
       const wedStr = `${wed.getFullYear()}-${String(wed.getMonth() + 1).padStart(2, '0')}-${String(wed.getDate()).padStart(2, '0')}`
-      setSelectedSemanaChart(semanasDisponibles.find(d => d === wedStr) || semanasDisponibles[0])
+      const defaultSemana = semanasDisponibles.find(d => d === wedStr) || semanasDisponibles[0]
+      if (!selectedSemanaChart) setSelectedSemanaChart(defaultSemana)
+      if (!selectedSemanaPPP) setSelectedSemanaPPP(defaultSemana)
     }
   }, [semanasDisponibles])
 
@@ -587,16 +599,35 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ── SWITCH PPP ── */}
-      <div className="flex items-center gap-3">
-        <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'recibido' ? 'text-blue-700' : 'text-slate-400'}`}>PPP Recibido</span>
-        <button
-          onClick={() => setPppMode(m => m === 'recibido' ? 'pagado' : 'recibido')}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${pppMode === 'pagado' ? 'bg-emerald-500' : 'bg-blue-500'}`}
-        >
-          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${pppMode === 'pagado' ? 'translate-x-6' : 'translate-x-1'}`} />
-        </button>
-        <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'pagado' ? 'text-emerald-700' : 'text-slate-400'}`}>PPP Pagados</span>
+      {/* ── SWITCH PPP + SELECTOR SEMANA ── */}
+      <div className="flex flex-wrap items-center gap-4 bg-white border border-slate-200 rounded-2xl px-4 py-3 shadow-sm">
+        <div className="flex items-center gap-2">
+          <Calculator size={15} className="text-slate-400" />
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Semana PPP</span>
+          <select
+            value={selectedSemanaPPP}
+            onChange={e => setSelectedSemanaPPP(e.target.value)}
+            className="bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-500"
+          >
+            {semanasDisponibles.map(s => {
+              const wed = new Date(s + 'T12:00:00')
+              const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+              const fmt = (d: Date) => `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}`
+              return <option key={s} value={s}>Mié {fmt(wed)} – Mar {fmt(tue)}/{tue.getFullYear()}</option>
+            })}
+          </select>
+        </div>
+        <div className="w-px h-5 bg-slate-200" />
+        <div className="flex items-center gap-3">
+          <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'recibido' ? 'text-blue-700' : 'text-slate-400'}`}>PPP Recibido</span>
+          <button
+            onClick={() => setPppMode(m => m === 'recibido' ? 'pagado' : 'recibido')}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${pppMode === 'pagado' ? 'bg-emerald-500' : 'bg-blue-500'}`}
+          >
+            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${pppMode === 'pagado' ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+          <span className={`text-xs font-black uppercase tracking-widest transition-colors ${pppMode === 'pagado' ? 'text-emerald-700' : 'text-slate-400'}`}>PPP Pagados</span>
+        </div>
       </div>
 
       {/* ── KPIs PRINCIPALES (5 tarjetas) ── */}
