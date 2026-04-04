@@ -776,8 +776,8 @@ function TasasTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () => 
             </thead>
             <tbody className="divide-y divide-slate-200 p-4">
                {tasasFiltradas.map(t => {
-                  const match = semanasGanaderas.find(s => s.fecha === t.fecha)
-                  const semName = match ? `Semana ${match.semana}` : '-'
+                  const match = semanasGanaderas.find(s => s.fecha_inicio === t.fecha)
+                  const semName = match ? `Semana ${match.numero_semana}` : '-'
                   return <TasasRow key={t.fecha} t={t} actualizarTasa={actualizarTasa} semana={semName} />
                })}
                {tasasFiltradas.length === 0 && (
@@ -2473,7 +2473,29 @@ function SemanasGanaderasTab({ user }: { user: any }) {
     setSemStats(map)
   }
 
-  useEffect(() => { fetchSemanas() }, [])
+  useEffect(() => {
+    async function init() {
+      // Auto-activar semana en curso si existe en la tabla
+      const hoy = new Date()
+      const dia = hoy.getDay()
+      const diff = dia < 3 ? dia + 4 : dia - 3
+      const mie = new Date(hoy); mie.setDate(hoy.getDate() - diff)
+      const mieStr = `${mie.getFullYear()}-${String(mie.getMonth() + 1).padStart(2, '0')}-${String(mie.getDate()).padStart(2, '0')}`
+      const { data: semActual } = await supabase
+        .from('semanas_ganaderas').select('id, activa, es_vigente').eq('fecha_inicio', mieStr).single()
+      if (semActual) {
+        const upd: any = {}
+        if (!semActual.activa) upd.activa = true
+        if (!semActual.es_vigente) {
+          await supabase.from('semanas_ganaderas').update({ es_vigente: false }).neq('id', semActual.id)
+          upd.es_vigente = true
+        }
+        if (Object.keys(upd).length > 0) await supabase.from('semanas_ganaderas').update(upd).eq('id', semActual.id)
+      }
+      fetchSemanas()
+    }
+    init()
+  }, [])
   useEffect(() => { if (semanas.length > 0) fetchStats(semanas) }, [semanas])
 
   function openCreate() {
@@ -2906,7 +2928,7 @@ function SemanasGanaderasTab({ user }: { user: any }) {
 export default function ConfiguracionTabs({ initialRol }: { initialRol: string }) {
   const supabase = createClient()
   const searchParams = useSearchParams()
-  const [tab, setTab] = useState(() => searchParams.get('tab') || 'usuarios')
+  const [tab, setTab] = useState(() => searchParams.get('tab') || 'semanas')
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [bitacoraModal, setBitacoraModal] = useState<{ open: boolean, modulo: string }>({ open: false, modulo: '' })
 

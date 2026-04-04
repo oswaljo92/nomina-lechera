@@ -187,7 +187,44 @@ export default function DashboardPage() {
       if (camionesRes.data) setCamiones(camionesRes.data)
       if (tasRes.data) setTasas(tasRes.data)
       if (precsRes.data) setPreciosSemanales(precsRes.data)
-      if (semsRes.data && semsRes.data.length > 0) setSemanasGanaderas(semsRes.data)
+
+      // ── Auto-activar semana en curso ────────────────────────────────────────
+      // Calcula el miércoles de la semana actual
+      const hoy = new Date()
+      const diaSemana = hoy.getDay()
+      const diffMie = (diaSemana < 3 ? diaSemana + 4 : diaSemana - 3)
+      const mieActual = new Date(hoy); mieActual.setDate(hoy.getDate() - diffMie)
+      const mieStr = `${mieActual.getFullYear()}-${String(mieActual.getMonth() + 1).padStart(2, '0')}-${String(mieActual.getDate()).padStart(2, '0')}`
+
+      // Intenta activar la semana en curso si existe y no está activa/vigente aún
+      const { data: semActual } = await supabase
+        .from('semanas_ganaderas')
+        .select('id, activa, es_vigente')
+        .eq('fecha_inicio', mieStr)
+        .single()
+
+      if (semActual) {
+        const updates: any = {}
+        if (!semActual.activa) updates.activa = true
+        if (!semActual.es_vigente) {
+          // Quitar vigente de las demás primero
+          await supabase.from('semanas_ganaderas').update({ es_vigente: false }).neq('id', semActual.id)
+          updates.es_vigente = true
+        }
+        if (Object.keys(updates).length > 0) {
+          await supabase.from('semanas_ganaderas').update(updates).eq('id', semActual.id)
+        }
+      }
+
+      // Recargar semanas activas después del auto-activate
+      const { data: semsActualizadas } = await supabase
+        .from('semanas_ganaderas')
+        .select('fecha_inicio, numero_semana, es_vigente')
+        .eq('activa', true)
+        .order('fecha_inicio', { ascending: false })
+      if (semsActualizadas && semsActualizadas.length > 0) setSemanasGanaderas(semsActualizadas)
+      else if (semsRes.data && semsRes.data.length > 0) setSemanasGanaderas(semsRes.data)
+
       setIsLoading(false)
     }
     fetchData()
@@ -225,7 +262,7 @@ export default function DashboardPage() {
 
   // ── KPIs básicos ───────────────────────────────────────────────────────────
   const totalLitros = useMemo(() => recFilteredPPP.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFilteredPPP])
-  const proveedoresActivos = useMemo(() => new Set(recFiltered.map(r => r.ganadero_id)).size, [recFiltered])
+  const proveedoresActivos = useMemo(() => new Set(recFilteredPPP.map(r => r.ganadero_id)).size, [recFilteredPPP])
 
   // ── KPIs financieros (pagado: litros_a_pagar estricto) ────────────────────
   const financials = useMemo(() => {
@@ -470,15 +507,15 @@ export default function DashboardPage() {
 
   const litrosSemanaData = useMemo(() => diasSemana.map((dia, index) => {
     const natIndex = mapDiasNat[index]
-    const sum = recFiltered
+    const sum = recFilteredPPP
       .filter(r => new Date(r.recepciones_camion?.fecha_ingreso).getDay() === natIndex)
       .reduce((a, c) => a + Number(c.litros_recepcion || 0), 0)
     return { name: dia, Litros: sum }
-  }), [recFiltered])
+  }), [recFilteredPPP])
 
   // ── Tortas ─────────────────────────────────────────────────────────────────
-  const propiosLts = useMemo(() => recFiltered.filter(r => r.ganaderos?.tipo_proveedor === 'PROPIO').reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFiltered])
-  const tercerosLts = useMemo(() => recFiltered.filter(r => r.ganaderos?.tipo_proveedor === 'TERCERO').reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFiltered])
+  const propiosLts = useMemo(() => recFilteredPPP.filter(r => r.ganaderos?.tipo_proveedor === 'PROPIO').reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFilteredPPP])
+  const tercerosLts = useMemo(() => recFilteredPPP.filter(r => r.ganaderos?.tipo_proveedor === 'TERCERO').reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFilteredPPP])
   const pie1Data = [{ name: 'Propios', value: propiosLts || 0 }, { name: 'Terceros', value: tercerosLts || 0 }]
   const pie2Data = useMemo(() => fabricas.map(f => ({
     name: `${f.codigo} · ${f.nombre}`,
@@ -488,7 +525,7 @@ export default function DashboardPage() {
   // ── Calidad diaria ─────────────────────────────────────────────────────────
   const calidadData = useMemo(() => diasSemana.map((dia, index) => {
     const natIndex = mapDiasNat[index]
-    const dayRecords = recFiltered.filter(r => new Date(r.recepciones_camion?.fecha_ingreso).getDay() === natIndex)
+    const dayRecords = recFilteredPPP.filter(r => new Date(r.recepciones_camion?.fecha_ingreso).getDay() === natIndex)
     if (dayRecords.length === 0) return { name: dia, Temperatura: null, Grasa: null, Proteina: null, Crioscopia: null }
     const n = dayRecords.length
     return {
@@ -498,7 +535,7 @@ export default function DashboardPage() {
       Proteina: (dayRecords.reduce((a, c) => a + Number(c.proteina || 0), 0) / n).toFixed(2),
       Crioscopia: (dayRecords.reduce((a, c) => a + Number(c.crioscopia || 0), 0) / n).toFixed(3),
     }
-  }), [recFiltered])
+  }), [recFilteredPPP])
 
   // ── BCV: semanas disponibles y datos diarios ───────────────────────────────
   const bcvSemanasDispo = useMemo(() => {
@@ -1035,7 +1072,10 @@ export default function DashboardPage() {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
                 <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)' }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px -5px rgb(0 0 0 / 0.15)' }}
+                  formatter={(v: any) => [Number(v).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) + ' L', 'Litros']}
+                />
                 <Area type="monotone" dataKey="Litros" stroke="#3b82f6" strokeWidth={3} fillOpacity={1} fill="url(#colorLitros)" activeDot={{ r: 8, fill: '#3b82f6' }} />
               </AreaChart>
             </ResponsiveContainer>
