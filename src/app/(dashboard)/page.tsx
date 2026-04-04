@@ -260,6 +260,15 @@ export default function DashboardPage() {
     })
   }, [recFiltered, selectedSemanaPPP])
 
+  const camionesFiltradosPPP = useMemo(() => {
+    if (!selectedSemanaPPP) return camionesFiltrados
+    return camionesFiltrados.filter(c => {
+      const fechaStr = c.fecha_ingreso?.substring(0, 10)
+      if (!fechaStr) return false
+      return getWednesdayOfWeek(fechaStr) === selectedSemanaPPP
+    })
+  }, [camionesFiltrados, selectedSemanaPPP])
+
   // ── KPIs básicos ───────────────────────────────────────────────────────────
   const totalLitros = useMemo(() => recFilteredPPP.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0), [recFilteredPPP])
   const proveedoresActivos = useMemo(() => new Set(recFilteredPPP.map(r => r.ganadero_id)).size, [recFilteredPPP])
@@ -468,7 +477,7 @@ export default function DashboardPage() {
     let sumAcidez = 0, sumTemp = 0, sumGrasa = 0, sumProt = 0, sumPorcAgua = 0, sumLitros = 0
     let totalDescAgua = 0
 
-    for (const r of recFiltered) {
+    for (const r of recFilteredPPP) {
       const litros = Number(r.litros_recepcion || 0)
       sumAcidez += Number(r.acidez || 0) * litros
       sumTemp += Number(r.temperatura || 0) * litros
@@ -480,8 +489,8 @@ export default function DashboardPage() {
     }
 
     let totalFaltantes = 0, totalSobrantes = 0
-    for (const camion of camionesFiltrados) {
-      const camRecs = recFiltradoFabrica.filter(r => r.recepcion_id === camion.id)
+    for (const camion of camionesFiltradosPPP) {
+      const camRecs = recFilteredPPP.filter(r => r.recepcion_id === camion.id)
       const sumRecep = camRecs.reduce((a, c) => a + Number(c.litros_recepcion || 0), 0)
       const romana = Number(camion.litros_romana || 0)
       if (sumRecep > romana) totalFaltantes += sumRecep - romana
@@ -499,7 +508,7 @@ export default function DashboardPage() {
       totalSobrantes,
       diferencias: totalSobrantes - totalFaltantes,
     }
-  }, [recFiltered, recFiltradoFabrica, camionesFiltrados])
+  }, [recFilteredPPP, camionesFiltradosPPP])
 
   // ── Datos gráfico de área semanal ──────────────────────────────────────────
   const diasSemana = ['Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo', 'Lunes', 'Martes']
@@ -519,8 +528,8 @@ export default function DashboardPage() {
   const pie1Data = [{ name: 'Propios', value: propiosLts || 0 }, { name: 'Terceros', value: tercerosLts || 0 }]
   const pie2Data = useMemo(() => fabricas.map(f => ({
     name: `${f.codigo} · ${f.nombre}`,
-    value: camionesFiltrados.filter(c => c.fabrica_id === f.id).reduce((a, c) => a + Number(c.litros_romana || 0), 0)
-  })).filter(d => d.value > 0), [fabricas, camionesFiltrados])
+    value: camionesFiltradosPPP.filter(c => c.fabrica_id === f.id).reduce((a, c) => a + Number(c.litros_romana || 0), 0)
+  })).filter(d => d.value > 0), [fabricas, camionesFiltradosPPP])
 
   // ── Calidad diaria ─────────────────────────────────────────────────────────
   const calidadData = useMemo(() => diasSemana.map((dia, index) => {
