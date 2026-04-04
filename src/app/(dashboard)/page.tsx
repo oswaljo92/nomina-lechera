@@ -263,9 +263,9 @@ export default function DashboardPage() {
 
   // ── PPP por fábrica (pagado) ───────────────────────────────────────────────
   const financialsByFactory = useMemo(() => {
-    const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
+    const map = new Map<string, { nombre: string, litros: number, litrosSinPrecio: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
     for (const f of fabricas) {
-      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
+      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, litrosSinPrecio: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
     }
     for (const r of recFilteredPPP) {
       const fabId = r.recepciones_camion?.fabrica_id
@@ -286,12 +286,14 @@ export default function DashboardPage() {
       if (precioLeche > 0) entry.litsLeche += litros
       if (precioFlete > 0) entry.litsFlete += litros
       if (precioLeche > 0 || precioFlete > 0) entry.litsTotal += litros
+      else entry.litrosSinPrecio += litros
     }
     return Array.from(map.entries())
       .map(([id, e]) => ({
         id,
         nombre: e.nombre,
         litros: e.litros,
+        litrosSinPrecio: e.litrosSinPrecio,
         pppLeche: e.litsLeche > 0 ? e.sumLeche / e.litsLeche : 0,
         pppFlete: e.litsFlete > 0 ? e.sumFlete / e.litsFlete : 0,
         pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
@@ -331,9 +333,9 @@ export default function DashboardPage() {
   }, [recFilteredPPP, preciosSemanales, tasaMap, lastTasa])
 
   const financialsByFactoryRecibido = useMemo(() => {
-    const map = new Map<string, { nombre: string, litros: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
+    const map = new Map<string, { nombre: string, litros: number, litrosSinPrecio: number, sumLeche: number, sumFlete: number, litsLeche: number, litsFlete: number, litsTotal: number }>()
     for (const f of fabricas) {
-      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
+      map.set(f.id, { nombre: `${f.codigo} · ${f.nombre}`, litros: 0, litrosSinPrecio: 0, sumLeche: 0, sumFlete: 0, litsLeche: 0, litsFlete: 0, litsTotal: 0 })
     }
     for (const r of recFilteredPPP) {
       const fabId = r.recepciones_camion?.fabrica_id
@@ -354,12 +356,14 @@ export default function DashboardPage() {
       if (precioLeche > 0) entry.litsLeche += litros
       if (precioFlete > 0) entry.litsFlete += litros
       if (precioLeche > 0 || precioFlete > 0) entry.litsTotal += litros
+      else entry.litrosSinPrecio += litros
     }
     return Array.from(map.entries())
       .map(([id, e]) => ({
         id,
         nombre: e.nombre,
         litros: e.litros,
+        litrosSinPrecio: e.litrosSinPrecio,
         pppLeche: e.litsLeche > 0 ? e.sumLeche / e.litsLeche : 0,
         pppFlete: e.litsFlete > 0 ? e.sumFlete / e.litsFlete : 0,
         pppTotal: e.litsTotal > 0 ? (e.sumLeche + e.sumFlete) / e.litsTotal : 0,
@@ -723,7 +727,8 @@ export default function DashboardPage() {
                   <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 px-4">Litros</th>
                   <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest pb-2 px-4">PPP Leche</th>
                   <th className="text-right text-[10px] font-black text-orange-500 uppercase tracking-widest pb-2 px-4">PPP Flete</th>
-                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 pl-4">PPP Total</th>
+                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 px-4">PPP Total</th>
+                  <th className="text-right text-[10px] font-black text-red-400 uppercase tracking-widest pb-2 pl-4">Sin Precio</th>
                 </tr>
               </thead>
               <tbody>
@@ -733,7 +738,12 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
                     <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
-                    <td className="py-2.5 pl-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right">
+                      {f.litrosSinPrecio > 0
+                        ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</span>
+                        : <span className="text-emerald-500 font-black text-xs">✓ 0%</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -744,7 +754,10 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactoryRecibido.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
                     <td className="py-2.5 px-4 text-right font-black text-teal-800">${financialsRecibido.pppLecheUSD.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-orange-800">${financialsRecibido.pppFleteUSD.toFixed(4)}</td>
-                    <td className="py-2.5 pl-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financialsRecibido.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right">
+                      {(() => { const s = financialsByFactoryRecibido.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactoryRecibido.reduce((a,f)=>a+f.litros,0); return s > 0 ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</span> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
+                    </td>
                   </tr>
                 </tfoot>
               )}
@@ -769,7 +782,8 @@ export default function DashboardPage() {
                   <th className="text-right text-[10px] font-black text-slate-400 uppercase tracking-widest pb-2 px-4">Litros</th>
                   <th className="text-right text-[10px] font-black text-teal-500 uppercase tracking-widest pb-2 px-4">PPP Leche</th>
                   <th className="text-right text-[10px] font-black text-orange-500 uppercase tracking-widest pb-2 px-4">PPP Flete</th>
-                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 pl-4">PPP Total</th>
+                  <th className="text-right text-[10px] font-black text-violet-500 uppercase tracking-widest pb-2 px-4">PPP Total</th>
+                  <th className="text-right text-[10px] font-black text-red-400 uppercase tracking-widest pb-2 pl-4">Sin Precio</th>
                 </tr>
               </thead>
               <tbody>
@@ -779,7 +793,12 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-semibold text-slate-500">{Math.round(f.litros).toLocaleString('es-VE')} L</td>
                     <td className="py-2.5 px-4 text-right font-black text-teal-700">${f.pppLeche.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-orange-700">${f.pppFlete.toFixed(4)}</td>
-                    <td className="py-2.5 pl-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-700">${f.pppTotal.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right">
+                      {f.litrosSinPrecio > 0
+                        ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(f.litrosSinPrecio).toLocaleString('es-VE')} L · {((f.litrosSinPrecio / f.litros) * 100).toFixed(1)}%</span>
+                        : <span className="text-emerald-500 font-black text-xs">✓ 0%</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -790,7 +809,10 @@ export default function DashboardPage() {
                     <td className="py-2.5 px-4 text-right font-black text-slate-700">{Math.round(financialsByFactory.reduce((a, f) => a + f.litros, 0)).toLocaleString('es-VE')} L</td>
                     <td className="py-2.5 px-4 text-right font-black text-teal-800">${financials.pppLecheUSD.toFixed(4)}</td>
                     <td className="py-2.5 px-4 text-right font-black text-orange-800">${financials.pppFleteUSD.toFixed(4)}</td>
-                    <td className="py-2.5 pl-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 px-4 text-right font-black text-violet-800">${financials.pppTotalUSD.toFixed(4)}</td>
+                    <td className="py-2.5 pl-4 text-right">
+                      {(() => { const s = financialsByFactory.reduce((a,f)=>a+f.litrosSinPrecio,0); const t = financialsByFactory.reduce((a,f)=>a+f.litros,0); return s > 0 ? <span className="inline-flex items-center gap-1 bg-red-50 text-red-600 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">{Math.round(s).toLocaleString('es-VE')} L · {((s/t)*100).toFixed(1)}%</span> : <span className="text-emerald-500 font-black text-xs">✓ 0%</span> })()}
+                    </td>
                   </tr>
                 </tfoot>
               )}

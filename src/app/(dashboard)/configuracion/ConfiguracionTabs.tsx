@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt } from 'lucide-react'
+import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
 import * as XLSX from 'xlsx'
@@ -1118,6 +1118,8 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
   const [dbError, setDbError] = useState('')
   const [selectedRows, setSelectedRows] = useState<string[]>([])
   const [busqueda, setBusqueda] = useState('')
+  const [sinPrecio, setSinPrecio] = useState<any[]>([])
+  const [sinPrecioLoading, setSinPrecioLoading] = useState(false)
 
   // Import
   const [isImportModalOpen, setIsImportModalOpen] = useState(false)
@@ -1173,7 +1175,6 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
 
         async function fetchPrefs() {
            const { data, error } = await supabase.from('precios_semanales').select('*').eq('fecha_semana', selectedSemana).order('created_at')
-           
            if (error) {
               setDbError('Error: ' + error.message)
               setPrecios([])
@@ -1183,8 +1184,28 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
            setIsLoading(false)
         }
         fetchPrefs()
+        fetchSinPrecio(selectedSemana)
      }
   }, [selectedSemana, semanas])
+
+  async function fetchSinPrecio(semana: string) {
+    setSinPrecioLoading(true)
+    // 1. Buscar todos los ganaderos activos
+    const { data: gans } = await supabase
+      .from('ganaderos')
+      .select('id, codigo_ganadero, nombre, grupo, rutas(nombre_ruta, codigo_ruta, fabricas(nombre, codigo))')
+      .eq('activo', true)
+    // 2. Buscar los precios de la semana
+    const { data: precsData } = await supabase
+      .from('precios_semanales')
+      .select('grupo')
+      .eq('fecha_semana', semana)
+    const gruposConPrecio = new Set((precsData || []).map((p: any) => p.grupo))
+    // 3. Ganaderos cuyo grupo no tiene precio en esta semana
+    const sinP = (gans || []).filter((g: any) => !g.grupo || !gruposConPrecio.has(g.grupo))
+    setSinPrecio(sinP)
+    setSinPrecioLoading(false)
+  }
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -1591,6 +1612,62 @@ CREATE TABLE precios_semanales (
                 </table>
              </div>
           )}
+       </div>
+
+       {/* ── Ganaderos sin precio asignado ── */}
+       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+         <div className="flex items-center gap-3 p-4 bg-slate-50 border-b border-slate-200">
+           <AlertTriangle size={18} className={sinPrecio.length > 0 ? 'text-amber-500' : 'text-emerald-500'} />
+           <h3 className="font-black text-slate-700 text-sm uppercase tracking-wide">
+             Ganaderos activos sin precio para esta semana
+           </h3>
+           {sinPrecioLoading
+             ? <Loader2 size={14} className="animate-spin text-slate-400 ml-auto" />
+             : sinPrecio.length > 0
+               ? <span className="ml-auto text-xs font-black bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">{sinPrecio.length} ganadero{sinPrecio.length !== 1 ? 's' : ''} sin precio</span>
+               : <span className="ml-auto text-xs font-black bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">✓ Todos tienen precio</span>
+           }
+         </div>
+         {!sinPrecioLoading && sinPrecio.length > 0 && (
+           <div className="overflow-x-auto">
+             <table className="w-full text-sm">
+               <thead>
+                 <tr className="border-b border-slate-100 bg-slate-50">
+                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Código</th>
+                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Nombre</th>
+                   <th className="text-left text-[10px] font-black text-amber-500 uppercase tracking-widest px-4 py-2">Grupo asignado</th>
+                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Ruta</th>
+                   <th className="text-left text-[10px] font-black text-slate-400 uppercase tracking-widest px-4 py-2">Fábrica</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 {sinPrecio.map((g: any) => {
+                   const ruta = Array.isArray(g.rutas) ? g.rutas[0] : g.rutas
+                   const fabrica = ruta?.fabricas
+                   return (
+                     <tr key={g.id} className="border-b border-slate-50 hover:bg-amber-50 transition-colors">
+                       <td className="px-4 py-2.5 font-black text-slate-700">{g.codigo_ganadero}</td>
+                       <td className="px-4 py-2.5 font-semibold text-slate-700">{g.nombre}</td>
+                       <td className="px-4 py-2.5">
+                         {g.grupo
+                           ? <span className="bg-amber-100 text-amber-700 font-black text-xs px-2 py-0.5 rounded-full border border-amber-200">{g.grupo} — sin precio esta semana</span>
+                           : <span className="bg-red-100 text-red-700 font-black text-xs px-2 py-0.5 rounded-full border border-red-200">Sin grupo asignado</span>
+                         }
+                       </td>
+                       <td className="px-4 py-2.5 text-slate-500 text-xs font-semibold">{ruta?.nombre_ruta || '—'}</td>
+                       <td className="px-4 py-2.5 text-slate-500 text-xs font-semibold">{fabrica ? `${fabrica.codigo} · ${fabrica.nombre}` : '—'}</td>
+                     </tr>
+                   )
+                 })}
+               </tbody>
+             </table>
+           </div>
+         )}
+         {!sinPrecioLoading && sinPrecio.length === 0 && (
+           <div className="p-6 text-center text-emerald-600 font-bold text-sm">
+             Todos los ganaderos activos tienen precio asignado para esta semana.
+           </div>
+         )}
        </div>
 
        {/* ── Modal Importar Precios ── */}
