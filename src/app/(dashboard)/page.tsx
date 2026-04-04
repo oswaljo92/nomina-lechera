@@ -135,6 +135,7 @@ export default function DashboardPage() {
   const [tasas, setTasas] = useState<any[]>([])
   const [filtroProveedor, setFiltroProveedor] = useState('Todos')
   const [preciosSemanales, setPreciosSemanales] = useState<any[]>([])
+  const [semanasGanaderas, setSemanasGanaderas] = useState<{ fecha_inicio: string; numero_semana: number; es_vigente: boolean }[]>([])
   const [selectedSemanaChart, setSelectedSemanaChart] = useState('')
   const [selectedBcvSemana, setSelectedBcvSemana] = useState('')
 
@@ -171,7 +172,7 @@ export default function DashboardPage() {
         const { data: profile } = await supabase.from('perfiles_usuarios').select('rol').eq('id', user.id).single()
         setUserRole((profile?.rol as 'admin' | 'analista') || 'analista')
       }
-      const [recsRes, camionesRes, tasRes, precsRes] = await Promise.all([
+      const [recsRes, camionesRes, tasRes, precsRes, semsRes] = await Promise.all([
         supabase.from('recepciones_detalle').select(`
           *,
           recepciones_camion ( fecha_ingreso, fabrica_id ),
@@ -180,11 +181,13 @@ export default function DashboardPage() {
         supabase.from('recepciones_camion').select('id, litros_romana, fabrica_id, fecha_ingreso'),
         supabase.from('tasas_bcv').select('*').order('fecha', { ascending: true }),
         supabase.from('precios_semanales').select('fecha_semana, grupo, precio_leche_usd, precio_flete_usd'),
+        supabase.from('semanas_ganaderas').select('fecha_inicio, numero_semana, es_vigente').eq('activa', true).order('fecha_inicio', { ascending: false }),
       ])
       if (recsRes.data) setRecepciones(recsRes.data)
       if (camionesRes.data) setCamiones(camionesRes.data)
       if (tasRes.data) setTasas(tasRes.data)
       if (precsRes.data) setPreciosSemanales(precsRes.data)
+      if (semsRes.data && semsRes.data.length > 0) setSemanasGanaderas(semsRes.data)
       setIsLoading(false)
     }
     fetchData()
@@ -527,27 +530,32 @@ export default function DashboardPage() {
   }, [selectedBcvSemana, tasaMap])
 
   // ── Semanas disponibles ────────────────────────────────────────────────────
+  // Si hay semanas_ganaderas activas, úsalas. Si no (tabla no configurada aún),
+  // fallback al método anterior para no romper el dashboard.
   const semanasDisponibles = useMemo(() => {
+    if (semanasGanaderas.length > 0) return semanasGanaderas.map(s => s.fecha_inicio)
     const fromTasas = tasas
       .filter(t => ['miercoles', 'Miércoles', 'miércoles', 'Miercoles'].includes(t.dia))
       .map(t => t.fecha)
     const fromPrecios = preciosSemanales.map(p => p.fecha_semana)
     return [...new Set([...fromTasas, ...fromPrecios])].sort((a, b) => b.localeCompare(a))
-  }, [tasas, preciosSemanales])
+  }, [semanasGanaderas, tasas, preciosSemanales])
 
   useEffect(() => {
     if (semanasDisponibles.length > 0 && (!selectedSemanaChart || !selectedSemanaPPP)) {
+      // Si hay una semana marcada como vigente, usarla como default
+      const vigente = semanasGanaderas.find(s => s.es_vigente)?.fecha_inicio
       const now = new Date()
       const day = now.getDay()
       const diff = (day < 3 ? 7 : 0) + day - 3
       const wed = new Date(now)
       wed.setDate(now.getDate() - diff)
       const wedStr = `${wed.getFullYear()}-${String(wed.getMonth() + 1).padStart(2, '0')}-${String(wed.getDate()).padStart(2, '0')}`
-      const defaultSemana = semanasDisponibles.find(d => d === wedStr) || semanasDisponibles[0]
+      const defaultSemana = vigente || semanasDisponibles.find(d => d === wedStr) || semanasDisponibles[0]
       if (!selectedSemanaChart) setSelectedSemanaChart(defaultSemana)
       if (!selectedSemanaPPP) setSelectedSemanaPPP(defaultSemana)
     }
-  }, [semanasDisponibles])
+  }, [semanasDisponibles, semanasGanaderas])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -685,13 +693,17 @@ export default function DashboardPage() {
               onClick={() => setSemanaPPPDropdownOpen(o => !o)}
               className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded-xl transition-colors select-none"
             >
-              {selectedSemanaPPP ? (
-                <>
-                  <span className="text-[10px] font-black uppercase">Sem</span>
-                  <span className="text-lg font-black leading-none">{getNumeroSemana(selectedSemanaPPP)}</span>
-                  <span className="text-xs font-bold">{formatSemanaLabel(selectedSemanaPPP)}</span>
-                </>
-              ) : (
+              {selectedSemanaPPP ? (() => {
+                const sg = semanasGanaderas.find(x => x.fecha_inicio === selectedSemanaPPP)
+                const num = sg?.numero_semana ?? getNumeroSemana(selectedSemanaPPP)
+                return (
+                  <>
+                    <span className="text-[10px] font-black uppercase">Sem</span>
+                    <span className="text-lg font-black leading-none">{num}</span>
+                    <span className="text-xs font-bold">{formatSemanaLabel(selectedSemanaPPP)}</span>
+                  </>
+                )
+              })() : (
                 <span className="text-xs font-bold">Sin semanas</span>
               )}
               <svg className={`w-3 h-3 ml-1 transition-transform duration-200 ${semanaPPPDropdownOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M19 9l-7 7-7-7" /></svg>
@@ -701,6 +713,9 @@ export default function DashboardPage() {
                 <div className="max-h-72 overflow-y-auto">
                   {semanasDisponibles.map(s => {
                     const isSelected = s === selectedSemanaPPP
+                    const sgEntry = semanasGanaderas.find(x => x.fecha_inicio === s)
+                    const isVigente = sgEntry?.es_vigente ?? false
+                    const numSem = sgEntry?.numero_semana ?? getNumeroSemana(s)
                     return (
                       <button
                         key={s}
@@ -713,8 +728,9 @@ export default function DashboardPage() {
                         className={`w-full text-left px-4 py-3 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'}`}
                       >
                         <div className="min-w-0">
-                          <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
-                            Semana {getNumeroSemana(s)}
+                          <div className={`text-xs font-bold leading-tight flex items-center gap-1.5 ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>
+                            Semana {numSem}
+                            {isVigente && <span className="text-[9px] bg-blue-600 text-white px-1.5 py-0.5 rounded font-black">VIGENTE</span>}
                           </div>
                           <div className="text-[10px] text-gray-700 mt-0.5">{formatSemanaLabel(s)}</div>
                         </div>

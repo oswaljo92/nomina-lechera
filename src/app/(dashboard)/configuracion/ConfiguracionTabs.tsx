@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle } from 'lucide-react'
+import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle, Calendar, Star, ToggleLeft, ToggleRight, Droplets, Truck } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
 import * as XLSX from 'xlsx'
@@ -2266,6 +2266,509 @@ function VitacoraTab({ user }: { user: any }) {
   )
 }
 
+// ─── Semanas Ganaderas Tab ────────────────────────────────────────────────────
+type SemanaGanadera = {
+  id: string
+  fecha_inicio: string
+  numero_semana: number
+  año: number
+  activa: boolean
+  es_vigente: boolean
+  notas: string | null
+  created_at: string
+}
+type SemanaStats = {
+  num_grupos_precio: number
+  tiene_bcv: boolean
+  total_litros: number
+  num_camiones: number
+}
+
+function SemanasGanaderasTab({ user }: { user: any }) {
+  const supabase = createClient()
+  const [semanas, setSemanas] = useState<SemanaGanadera[]>([])
+  const [semStats, setSemStats] = useState<Record<string, SemanaStats>>({})
+  const [loading, setLoading] = useState(false)
+  const [dbError, setDbError] = useState(false)
+  const [filtro, setFiltro] = useState<'todas' | 'activas'>('activas')
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editItem, setEditItem] = useState<SemanaGanadera | null>(null)
+  const [form, setForm] = useState({ fecha_inicio: '', numero_semana: '', notas: '' })
+  const [formError, setFormError] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [migrating, setMigrating] = useState(false)
+  const [migrateResult, setMigrateResult] = useState('')
+  const [exportingImg, setExportingImg] = useState(false)
+  const statsRef = useRef<HTMLDivElement>(null)
+
+  function getNumSemana(wedStr: string): number {
+    const p = wedStr.split('-')
+    const wed = new Date(parseInt(p[0]), parseInt(p[1]) - 1, parseInt(p[2]))
+    const jan1 = new Date(wed.getFullYear(), 0, 1)
+    const daysBack = (jan1.getDay() - 3 + 7) % 7
+    const firstWed = new Date(jan1); firstWed.setDate(jan1.getDate() - daysBack)
+    const n = Math.round((wed.getTime() - firstWed.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+    return n > 0 ? n : 1
+  }
+  function getFechaFin(wedStr: string): string {
+    const wed = new Date(wedStr + 'T12:00:00')
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    return `${tue.getFullYear()}-${String(tue.getMonth() + 1).padStart(2, '0')}-${String(tue.getDate()).padStart(2, '0')}`
+  }
+  function formatRango(wedStr: string): string {
+    const wed = new Date(wedStr + 'T12:00:00')
+    const tue = new Date(wed); tue.setDate(wed.getDate() + 6)
+    const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+    return `Mié ${fmt(wed)} – Mar ${fmt(tue)}/${tue.getFullYear()}`
+  }
+  function isWednesday(dateStr: string): boolean {
+    if (!dateStr) return false
+    return new Date(dateStr + 'T12:00:00').getDay() === 3
+  }
+  function nextWednesdayStr(): string {
+    const now = new Date()
+    const day = now.getDay()
+    const diff = day === 3 ? 0 : (day < 3 ? 3 - day : 10 - day)
+    const d = new Date(now); d.setDate(now.getDate() + diff)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  async function fetchSemanas() {
+    setLoading(true)
+    const { data, error } = await supabase
+      .from('semanas_ganaderas')
+      .select('*')
+      .order('fecha_inicio', { ascending: false })
+    if (error) { setDbError(true); setLoading(false); return }
+    // Check new schema: if records lack fecha_inicio, treat as old schema
+    if (data && data.length > 0 && !('fecha_inicio' in data[0])) { setDbError(true); setLoading(false); return }
+    setSemanas(data || [])
+    setDbError(false)
+    setLoading(false)
+  }
+
+  async function fetchStats(list: SemanaGanadera[]) {
+    if (!list.length) return
+    const fechas = list.map(s => s.fecha_inicio)
+    const [{ data: precData }, { data: bcvData }, { data: camData }] = await Promise.all([
+      supabase.from('precios_semanales').select('fecha_semana, grupo').in('fecha_semana', fechas),
+      supabase.from('tasas_bcv').select('fecha').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles']).in('fecha', fechas),
+      supabase.from('recepciones_camion').select('fecha_ingreso, litros_romana')
+        .gte('fecha_ingreso', list[list.length - 1].fecha_inicio)
+        .lte('fecha_ingreso', getFechaFin(list[0].fecha_inicio)),
+    ])
+    const map: Record<string, SemanaStats> = {}
+    for (const s of list) {
+      const tue = getFechaFin(s.fecha_inicio)
+      const cams = camData?.filter(c => { const f = (c.fecha_ingreso || '').substring(0, 10); return f >= s.fecha_inicio && f <= tue }) || []
+      map[s.fecha_inicio] = {
+        num_grupos_precio: precData?.filter(p => p.fecha_semana === s.fecha_inicio).length ?? 0,
+        tiene_bcv: bcvData?.some(b => b.fecha === s.fecha_inicio) ?? false,
+        total_litros: cams.reduce((a, c) => a + Number(c.litros_romana || 0), 0),
+        num_camiones: cams.length,
+      }
+    }
+    setSemStats(map)
+  }
+
+  useEffect(() => { fetchSemanas() }, [])
+  useEffect(() => { if (semanas.length > 0) fetchStats(semanas) }, [semanas])
+
+  function openCreate() {
+    const wed = nextWednesdayStr()
+    setForm({ fecha_inicio: wed, numero_semana: String(getNumSemana(wed)), notas: '' })
+    setEditItem(null); setFormError(''); setModalOpen(true)
+  }
+  function openEdit(s: SemanaGanadera) {
+    setForm({ fecha_inicio: s.fecha_inicio, numero_semana: String(s.numero_semana), notas: s.notas || '' })
+    setEditItem(s); setFormError(''); setModalOpen(true)
+  }
+
+  async function handleSave() {
+    if (!isWednesday(form.fecha_inicio)) { setFormError('La fecha debe ser un miércoles.'); return }
+    const num = Number(form.numero_semana)
+    if (!form.numero_semana || isNaN(num) || num < 1) { setFormError('Número de semana inválido.'); return }
+    setSaving(true)
+    const payload = {
+      fecha_inicio: form.fecha_inicio,
+      numero_semana: num,
+      año: new Date(form.fecha_inicio + 'T12:00:00').getFullYear(),
+      notas: form.notas || null,
+      activa: editItem?.activa ?? false,
+      es_vigente: editItem?.es_vigente ?? false,
+    }
+    const { error } = editItem
+      ? await supabase.from('semanas_ganaderas').update(payload).eq('id', editItem.id)
+      : await supabase.from('semanas_ganaderas').insert(payload)
+    setSaving(false)
+    if (error) { setFormError('Error: ' + error.message); return }
+    setModalOpen(false)
+    logAction(supabase, user, 'Semanas', editItem ? 'EDITAR' : 'CREAR', `Sem ${num} – ${formatRango(form.fecha_inicio)}`)
+    fetchSemanas()
+  }
+
+  async function handleToggleActiva(s: SemanaGanadera) {
+    if (s.es_vigente && s.activa) { alert('La semana vigente no puede desactivarse.'); return }
+    const { error } = await supabase.from('semanas_ganaderas').update({ activa: !s.activa }).eq('id', s.id)
+    if (!error) {
+      setSemanas(prev => prev.map(x => x.id === s.id ? { ...x, activa: !s.activa } : x))
+      logAction(supabase, user, 'Semanas', 'TOGGLE_ACTIVA', `Sem ${s.numero_semana} activa=${!s.activa}`)
+    }
+  }
+
+  async function handleMarcarVigente(s: SemanaGanadera) {
+    if (s.es_vigente) return
+    if (!confirm(`¿Marcar Semana ${s.numero_semana} como vigente? Esto cambiará la semana preseleccionada en todo el sistema.`)) return
+    await supabase.from('semanas_ganaderas').update({ es_vigente: false }).neq('id', s.id)
+    const { error } = await supabase.from('semanas_ganaderas').update({ es_vigente: true, activa: true }).eq('id', s.id)
+    if (!error) {
+      setSemanas(prev => prev.map(x => ({ ...x, es_vigente: x.id === s.id, activa: x.id === s.id ? true : x.activa })))
+      logAction(supabase, user, 'Semanas', 'MARCAR_VIGENTE', `Sem ${s.numero_semana} marcada vigente`)
+    }
+  }
+
+  async function handleDelete(s: SemanaGanadera) {
+    if (s.es_vigente) { alert('No puedes eliminar la semana vigente.'); return }
+    if (!confirm(`¿Eliminar Semana ${s.numero_semana} (${formatRango(s.fecha_inicio)})?`)) return
+    const { error } = await supabase.from('semanas_ganaderas').delete().eq('id', s.id)
+    if (!error) {
+      setSemanas(prev => prev.filter(x => x.id !== s.id))
+      logAction(supabase, user, 'Semanas', 'BORRAR', `Sem ${s.numero_semana}`)
+    }
+  }
+
+  async function handleMigrate() {
+    setMigrating(true); setMigrateResult('')
+    const [{ data: tasData }, { data: precData }, { data: existing }] = await Promise.all([
+      supabase.from('tasas_bcv').select('fecha').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles']),
+      supabase.from('precios_semanales').select('fecha_semana'),
+      supabase.from('semanas_ganaderas').select('fecha_inicio'),
+    ])
+    const existingSet = new Set(existing?.map(e => e.fecha_inicio) || [])
+    const allFechas = new Set<string>()
+    tasData?.forEach(t => allFechas.add(t.fecha))
+    precData?.forEach(p => allFechas.add(p.fecha_semana))
+    const toInsert = Array.from(allFechas).filter(f => !existingSet.has(f) && isWednesday(f))
+      .map(f => ({ fecha_inicio: f, numero_semana: getNumSemana(f), año: new Date(f + 'T12:00:00').getFullYear(), activa: false, es_vigente: false, notas: null }))
+    let ok = 0, errs = 0
+    for (const item of toInsert) {
+      const { error } = await supabase.from('semanas_ganaderas').insert(item)
+      if (error) errs++; else ok++
+    }
+    setMigrateResult(`${ok} semanas importadas.${errs ? ` ${errs} errores.` : ''} Actívalas manualmente según necesites.`)
+    setMigrating(false)
+    fetchSemanas()
+  }
+
+  async function handleExportImage() {
+    if (!statsRef.current) return
+    setExportingImg(true)
+    try {
+      const { toPng } = await import('html-to-image')
+      const png = await toPng(statsRef.current, { cacheBust: true, backgroundColor: '#f8fafc' })
+      const a = document.createElement('a'); a.href = png
+      a.download = `semanas-ganaderas-${new Date().toISOString().substring(0, 10)}.png`; a.click()
+    } catch (e) { alert('Error al exportar imagen') }
+    setExportingImg(false)
+  }
+
+  const vigente = semanas.find(s => s.es_vigente)
+  const filtradas = filtro === 'activas' ? semanas.filter(s => s.activa) : semanas
+
+  const SQL_SETUP = `-- Ejecuta esto en Supabase SQL Editor (una sola vez)
+-- Si ya existe una tabla semanas_ganaderas con esquema antiguo, ejecuta primero:
+-- DROP TABLE IF EXISTS semanas_ganaderas;
+
+CREATE TABLE IF NOT EXISTS semanas_ganaderas (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  fecha_inicio DATE NOT NULL UNIQUE,
+  numero_semana INTEGER NOT NULL,
+  año INTEGER NOT NULL,
+  activa BOOLEAN NOT NULL DEFAULT false,
+  es_vigente BOOLEAN NOT NULL DEFAULT false,
+  notas TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);`
+
+  if (loading) return <div className="flex justify-center py-20"><Loader2 className="animate-spin text-blue-500 w-10 h-10" /></div>
+
+  if (dbError) return (
+    <div className="space-y-4">
+      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
+        <div className="flex items-center gap-2 mb-3">
+          <AlertTriangle size={20} className="text-amber-500" />
+          <h3 className="font-black text-amber-800">Configuración inicial requerida</h3>
+        </div>
+        <p className="text-sm text-amber-700 mb-4">La tabla <code className="bg-amber-100 px-1 rounded">semanas_ganaderas</code> no existe o tiene un esquema anterior. Ejecuta este SQL en tu Supabase:</p>
+        <pre className="text-xs bg-white border border-amber-200 p-4 rounded-xl overflow-x-auto text-slate-800 mb-4">{SQL_SETUP}</pre>
+        <button onClick={fetchSemanas} className="flex items-center gap-2 bg-amber-500 text-white px-4 py-2 rounded-xl font-bold hover:bg-amber-600 transition-colors">
+          <RefreshCcw size={16} /> Verificar tabla
+        </button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Header + acciones ── */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-xl font-black text-slate-800">Semanas Ganaderas</h2>
+          <p className="text-sm text-slate-500">Gestiona qué semanas aparecen en los dropdowns del sistema.</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={handleMigrate} disabled={migrating}
+            className="flex items-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-3 py-2 rounded-xl text-xs font-bold transition-colors disabled:opacity-50">
+            {migrating ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            Importar existentes
+          </button>
+          <button onClick={openCreate}
+            className="flex items-center gap-2 bg-blue-600 text-white hover:bg-blue-700 px-4 py-2 rounded-xl text-xs font-bold transition-colors shadow-sm">
+            <Plus size={14} /> Nueva Semana
+          </button>
+        </div>
+      </div>
+
+      {migrateResult && (
+        <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-xl text-sm font-semibold flex items-center gap-2">
+          <CheckCircle2 size={16} /> {migrateResult}
+        </div>
+      )}
+
+      {/* ── Vigente actual ── */}
+      {vigente && (
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-2xl p-4 text-white flex flex-wrap items-center gap-4 shadow-lg shadow-blue-500/20">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 rounded-xl p-2"><Star size={20} className="fill-white" /></div>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Semana Vigente</p>
+              <p className="text-2xl font-black leading-none">SEM {vigente.numero_semana}</p>
+              <p className="text-sm font-bold opacity-90">{formatRango(vigente.fecha_inicio)}</p>
+            </div>
+          </div>
+          {semStats[vigente.fecha_inicio] && (
+            <div className="flex flex-wrap gap-4 ml-auto">
+              <div className="text-center">
+                <p className="text-xl font-black">{Math.round(semStats[vigente.fecha_inicio].total_litros).toLocaleString('es-VE')}</p>
+                <p className="text-[10px] font-bold opacity-75 uppercase">Litros</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-black">{semStats[vigente.fecha_inicio].num_camiones}</p>
+                <p className="text-[10px] font-bold opacity-75 uppercase">Viajes</p>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-black">{semStats[vigente.fecha_inicio].num_grupos_precio}</p>
+                <p className="text-[10px] font-bold opacity-75 uppercase">Grupos Precio</p>
+              </div>
+              <div className="text-center">
+                <p className={`text-xl font-black ${semStats[vigente.fecha_inicio].tiene_bcv ? '' : 'opacity-50'}`}>
+                  {semStats[vigente.fecha_inicio].tiene_bcv ? '✓' : '✗'}
+                </p>
+                <p className="text-[10px] font-bold opacity-75 uppercase">Tasa BCV</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Filtros ── */}
+      <div className="flex items-center gap-2">
+        <button onClick={() => setFiltro('activas')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${filtro === 'activas' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+          Solo Activas ({semanas.filter(s => s.activa).length})
+        </button>
+        <button onClick={() => setFiltro('todas')}
+          className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-colors ${filtro === 'todas' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}>
+          Todas ({semanas.length})
+        </button>
+        <button onClick={handleExportImage} disabled={exportingImg}
+          className="ml-auto flex items-center gap-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors disabled:opacity-50">
+          {exportingImg ? <Loader2 size={13} className="animate-spin" /> : <ImageIcon size={13} />}
+          Exportar Imagen
+        </button>
+      </div>
+
+      {/* ── Tabla exportable ── */}
+      <div ref={statsRef} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-4 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+          <Calendar size={16} className="text-blue-500" />
+          <span className="font-black text-slate-700 text-sm uppercase tracking-wide">Semanas Ganaderas</span>
+          <span className="text-[10px] text-slate-400 font-semibold ml-auto">Miércoles – Martes</span>
+        </div>
+        {filtradas.length === 0 ? (
+          <div className="py-16 text-center text-slate-400 font-semibold">
+            {filtro === 'activas' ? 'No hay semanas activas. Activa alguna o crea una nueva.' : 'No hay semanas registradas. Usa "Importar existentes" o crea una nueva.'}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Semana</th>
+                  <th className="text-left px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Rango</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Litros</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Viajes</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Precios</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">BCV</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Activa</th>
+                  <th className="text-center px-3 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</th>
+                  <th className="text-right px-4 py-3 text-[10px] font-black text-slate-400 uppercase tracking-widest">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtradas.map(s => {
+                  const st = semStats[s.fecha_inicio]
+                  return (
+                    <tr key={s.id} className={`border-b border-slate-50 hover:bg-slate-50 transition-colors ${s.es_vigente ? 'bg-blue-50/50' : ''}`}>
+                      {/* SEM badge */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div className={`flex items-center gap-1 px-2 py-1 rounded-lg ${s.es_vigente ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600'}`}>
+                            <span className="text-[9px] font-black uppercase">SEM</span>
+                            <span className="text-base font-black leading-none">{s.numero_semana}</span>
+                          </div>
+                          <span className="text-[10px] text-slate-400 font-semibold">{s.año}</span>
+                        </div>
+                      </td>
+                      {/* Rango */}
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-bold text-slate-700">{formatRango(s.fecha_inicio)}</span>
+                        {s.notas && <p className="text-[10px] text-slate-400 mt-0.5">{s.notas}</p>}
+                      </td>
+                      {/* Stats */}
+                      <td className="px-3 py-3 text-center">
+                        <span className="text-xs font-bold text-slate-700">{st ? Math.round(st.total_litros).toLocaleString('es-VE') : '—'}</span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        <span className="text-xs font-bold text-slate-700">{st?.num_camiones ?? '—'}</span>
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {st ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black ${st.num_grupos_precio > 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                            {st.num_grupos_precio > 0 ? `${st.num_grupos_precio} grupos` : 'Sin precios'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-center">
+                        {st ? (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black ${st.tiene_bcv ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'}`}>
+                            {st.tiene_bcv ? '✓ BCV' : '✗ BCV'}
+                          </span>
+                        ) : '—'}
+                      </td>
+                      {/* Toggle activa */}
+                      <td className="px-3 py-3 text-center">
+                        <button onClick={() => handleToggleActiva(s)} title={s.activa ? 'Desactivar' : 'Activar'}>
+                          {s.activa
+                            ? <ToggleRight size={24} className="text-blue-500 hover:text-blue-700 transition-colors" />
+                            : <ToggleLeft size={24} className="text-slate-300 hover:text-slate-500 transition-colors" />}
+                        </button>
+                      </td>
+                      {/* Estado */}
+                      <td className="px-3 py-3 text-center">
+                        {s.es_vigente ? (
+                          <span className="inline-flex items-center gap-1 bg-blue-600 text-white text-[10px] font-black px-2 py-1 rounded-lg">
+                            <Star size={9} className="fill-white" /> VIGENTE
+                          </span>
+                        ) : s.activa ? (
+                          <span className="inline-flex items-center bg-emerald-100 text-emerald-700 text-[10px] font-black px-2 py-1 rounded-lg">ACTIVA</span>
+                        ) : (
+                          <span className="inline-flex items-center bg-slate-100 text-slate-400 text-[10px] font-black px-2 py-1 rounded-lg">INACTIVA</span>
+                        )}
+                      </td>
+                      {/* Acciones */}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {!s.es_vigente && (
+                            <button onClick={() => handleMarcarVigente(s)} title="Marcar como vigente"
+                              className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors">
+                              <Star size={13} />
+                            </button>
+                          )}
+                          <button onClick={() => openEdit(s)} title="Editar"
+                            className="p-1.5 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors">
+                            <Edit2 size={13} />
+                          </button>
+                          {!s.es_vigente && (
+                            <button onClick={() => handleDelete(s)} title="Eliminar"
+                              className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ── Modal crear/editar ── */}
+      {modalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) setModalOpen(false) }}>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-slate-800 text-lg">{editItem ? 'Editar Semana' : 'Nueva Semana'}</h3>
+              <button onClick={() => setModalOpen(false)} className="p-2 rounded-lg hover:bg-slate-100 text-slate-400"><X size={16} /></button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">Fecha de inicio (miércoles)</label>
+                <input type="date" value={form.fecha_inicio}
+                  onChange={e => {
+                    const v = e.target.value
+                    setForm(f => ({ ...f, fecha_inicio: v, numero_semana: v && isWednesday(v) ? String(getNumSemana(v)) : f.numero_semana }))
+                  }}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                {form.fecha_inicio && !isWednesday(form.fecha_inicio) && (
+                  <p className="text-[11px] text-red-500 font-semibold mt-1">⚠ Esta fecha no es miércoles.</p>
+                )}
+                {form.fecha_inicio && isWednesday(form.fecha_inicio) && (
+                  <p className="text-[11px] text-emerald-600 font-semibold mt-1">✓ Rango: {formatRango(form.fecha_inicio)}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">Número de semana</label>
+                <input type="number" min="1" max="53" value={form.numero_semana}
+                  onChange={e => setForm(f => ({ ...f, numero_semana: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+                <p className="text-[11px] text-slate-400 font-semibold mt-1">Se calcula automáticamente al elegir la fecha. Puedes ajustarlo si tu calendario difiere.</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-1.5">Notas (opcional)</label>
+                <input type="text" value={form.notas} placeholder="Ej: Semana especial, feriados..."
+                  onChange={e => setForm(f => ({ ...f, notas: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+              </div>
+
+              {formError && <p className="text-xs text-red-600 font-bold bg-red-50 px-3 py-2 rounded-lg">{formError}</p>}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button onClick={() => setModalOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-sm hover:bg-slate-50 transition-colors">
+                Cancelar
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition-colors disabled:opacity-50">
+                {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
+                {editItem ? 'Guardar cambios' : 'Crear semana'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function ConfiguracionTabs({ initialRol }: { initialRol: string }) {
   const supabase = createClient()
   const searchParams = useSearchParams()
@@ -2285,6 +2788,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
   }, [])
 
   const tabsItems = [
+    { id: 'semanas', label: 'Semanas Ganaderas', shortLabel: 'Semanas', icon: Calendar },
     { id: 'usuarios', label: 'Usuarios', shortLabel: 'Usuarios', icon: Users },
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
@@ -2321,6 +2825,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
       </div>
 
       <div className="mt-6">
+         {tab === 'semanas' && <SemanasGanaderasTab user={currentUser} />}
          {tab === 'usuarios' && <UsuariosTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Usuarios' })} />}
          {tab === 'tasas' && <TasasTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Tasas BCV' })} />}
          {tab === 'crioscopia' && <CrioscopiaTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Crioscopía' })} />}
