@@ -122,7 +122,7 @@ export default function FacturacionPage() {
 
     const [{ data: fabData }, { data: semGanData }] = await Promise.all([
       supabase.from('fabricas').select('id, codigo, nombre, razon_social, rif, direccion_fiscal'),
-      supabase.from('semanas_ganaderas').select('*').order('fecha_inicio', { ascending: false }),
+      supabase.from('semanas_ganaderas').select('*').eq('activa', true).order('fecha_inicio', { ascending: false }),
     ])
     setFabricasConFiscal(fabData ?? [])
     setSemanasGanaderas(semGanData ?? [])
