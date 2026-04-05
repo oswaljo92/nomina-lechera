@@ -100,6 +100,7 @@ export default function FacturacionPage() {
   const [isBitacoraOpen, setIsBitacoraOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<Factura | null>(null)
   const [isDeleteBulkOpen, setIsDeleteBulkOpen] = useState(false)
+  const [semDropOpen, setSemDropOpen] = useState(false)
 
   // Exportación
   const [exporting, setExporting] = useState(false)
@@ -652,7 +653,6 @@ export default function FacturacionPage() {
       <div className="flex flex-wrap gap-3 items-center">
         {/* Semana — dropdown con número de semana */}
         {(() => {
-          const [semDropOpen, setSemDropOpen] = React.useState(false)
           const selEntry = semanasDisponibles.find(([f]) => f === filtroSemana)
           const selLabel = selEntry
             ? (selEntry[1].numSemana ? `Sem. ${selEntry[1].numSemana} — ${selEntry[1].nombre}` : selEntry[1].nombre)
