@@ -392,6 +392,8 @@ export default function FacturacionPage() {
       return p?.precio_flete_usd || 0
     }
 
+    const RUTA_TERCEROS = '300'
+
     const items: GenPreviewItem[] = []
     const camionesArr = camiones || []
 
@@ -409,16 +411,39 @@ export default function FacturacionPage() {
 
     // ── Por ruta (transportista) ──
     const rutaMap: Record<string, { ruta: any; litrosFlete: number; litrosRomana: number; litrosGanaderos: number; litrosAgua: number }> = {}
+    // ── Ruta 300: acumula por ganadero (cada tercero trae su propio camión) ──
+    const ruta300Map: Record<string, { litrosFlete: number; litrosRomana: number; litrosAgua: number; rutaId: string }> = {}
     for (const cam of camionesArr) {
       const r = (cam as any).rutas
       if (!r) continue
-      const key = r.id
-      if (!rutaMap[key]) rutaMap[key] = { ruta: r, litrosFlete: 0, litrosRomana: 0, litrosGanaderos: 0, litrosAgua: 0 }
-      rutaMap[key].litrosRomana += Number((cam as any).litros_romana || 0)
-      rutaMap[key].litrosAgua += Number((cam as any).agua_transporte || 0)
+      const litrosRomana = Number((cam as any).litros_romana || 0)
+      const litrosAgua = Number((cam as any).agua_transporte || 0)
       const sumDet = (cam.recepciones_detalle as any[] || []).reduce((s: number, d: any) => s + Number(d.litros_a_pagar || d.litros_recepcion || 0), 0)
-      rutaMap[key].litrosGanaderos += sumDet
-      rutaMap[key].litrosFlete += sumDet
+
+      if (r.codigo_ruta === RUTA_TERCEROS) {
+        // Acumular por ganadero individual (cada uno trae su propio camión)
+        for (const det of (cam.recepciones_detalle as any[] || [])) {
+          if (!det.ganadero_id) continue
+          const gid = det.ganadero_id
+          if (!ruta300Map[gid]) ruta300Map[gid] = { litrosFlete: 0, litrosRomana: 0, litrosAgua: 0, rutaId: r.id }
+          ruta300Map[gid].litrosFlete += Number(det.litros_a_pagar || det.litros_recepcion || 0)
+          ruta300Map[gid].litrosRomana += litrosRomana
+          ruta300Map[gid].litrosAgua += litrosAgua
+        }
+      } else {
+        const key = r.id
+        if (!rutaMap[key]) rutaMap[key] = { ruta: r, litrosFlete: 0, litrosRomana: 0, litrosGanaderos: 0, litrosAgua: 0 }
+        rutaMap[key].litrosRomana += litrosRomana
+        rutaMap[key].litrosAgua += litrosAgua
+        rutaMap[key].litrosGanaderos += sumDet
+        rutaMap[key].litrosFlete += sumDet
+      }
+    }
+
+    // Precio de flete por ganadero (usado para terceros ruta 300)
+    const getPrecioFleteGanadero = (codigoGanadero: string): number => {
+      const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
+      return p?.precio_flete_usd || 0
     }
 
     // Check which ganaderos own their ruta
@@ -431,15 +456,34 @@ export default function FacturacionPage() {
 
     // Build GANADERO / GANADERO_TRANSPORTISTA items
     for (const [gid, { ganadero, litros }] of Object.entries(ganaderoMap)) {
-      const esTransportista = ganaderosConRutaPropia.has(gid)
+      const esRuta300 = gid in ruta300Map && !ganaderosConRutaPropia.has(gid)
+      const esTransportista = ganaderosConRutaPropia.has(gid) || esRuta300
       const tipo: GenPreviewItem['tipo'] = esTransportista ? 'ganadero_transportista' : 'ganadero'
-      const ruta = esTransportista ? Object.values(rutaMap).find(rv => rv.ruta.ganadero_id === gid) : null
+
+      let litrosFaltantes = 0
+      let litrosAgua = 0
+      let precioFlete = 0
+      let rutaId: string | null = null
+      let precDeducRuta: any = null
+
+      if (ganaderosConRutaPropia.has(gid)) {
+        const ruta = Object.values(rutaMap).find(rv => rv.ruta.ganadero_id === gid)
+        litrosFaltantes = ruta ? Math.ceil(Math.max(0, ruta.litrosRomana - ruta.litrosGanaderos)) : 0
+        litrosAgua = ruta ? ruta.litrosAgua : 0
+        precioFlete = ruta ? getPrecioFlete(ruta.ruta.codigo_ruta) : 0
+        rutaId = ruta?.ruta.id || null
+        precDeducRuta = ruta ? (precDeducData || []).find(pd => pd.ruta_id === ruta.ruta.id) : null
+      } else if (esRuta300) {
+        const r300 = ruta300Map[gid]
+        litrosFaltantes = Math.ceil(Math.max(0, r300.litrosRomana - r300.litrosFlete))
+        litrosAgua = r300.litrosAgua
+        precioFlete = getPrecioFleteGanadero(ganadero.codigo_ganadero)
+        rutaId = r300.rutaId
+        precDeducRuta = (precDeducData || []).find(pd => pd.ruta_id === r300.rutaId) || null
+      }
+
       const existFact = (existingFacts || []).find(ef => ef.ganadero_id === gid && (ef.tipo === tipo || ef.tipo === 'ganadero_transportista'))
       const precioLeche = getPrecioLeche(ganadero.codigo_ganadero)
-      const precioFlete = ruta ? getPrecioFlete(ruta.ruta.codigo_ruta) : 0
-      const litrosFaltantes = ruta ? Math.max(0, ruta.litrosRomana - ruta.litrosGanaderos) : 0
-      const litrosAgua = ruta ? ruta.litrosAgua : 0
-      const precDeducRuta = ruta ? (precDeducData || []).find(pd => pd.ruta_id === ruta.ruta.id) : null
 
       items.push({
         key: gid,
@@ -454,19 +498,20 @@ export default function FacturacionPage() {
         precio_flete_usd: precioFlete,
         existingFacturaId: existFact?.id || null,
         ganadero_id: gid,
-        ruta_id: ruta?.ruta.id || null,
+        ruta_id: rutaId,
         tasa,
         emisor,
         precio_deduccion_usd: precDeducRuta?.precio_deduccion_usd || 0,
       })
     }
 
-    // Build TRANSPORTISTA items (rutas sin ganadero propio)
+    // Build TRANSPORTISTA items (rutas sin ganadero propio, excluye ruta 300)
     for (const [rid, rv] of Object.entries(rutaMap)) {
+      if (rv.ruta.codigo_ruta === RUTA_TERCEROS) continue // ruta 300 no genera recibo propio
       if (rv.ruta.ganadero_id && ganaderoMap[rv.ruta.ganadero_id]) continue // ya incluido como ganadero_transportista
       const existFact = (existingFacts || []).find(ef => ef.ruta_id === rid && ef.tipo === 'transportista')
       const precioFlete = getPrecioFlete(rv.ruta.codigo_ruta)
-      const litrosFaltantes = Math.max(0, rv.litrosRomana - rv.litrosGanaderos)
+      const litrosFaltantes = Math.ceil(Math.max(0, rv.litrosRomana - rv.litrosGanaderos))
       const precDeducRuta = (precDeducData || []).find(pd => pd.ruta_id === rid)
 
       items.push({
