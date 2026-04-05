@@ -63,7 +63,7 @@ export default function GanaderosPage() {
     setIsAdmin(profile?.rol === 'admin')
     setCurUser(userObj)
 
-    const ganaderoQ = supabase.from('ganaderos').select('*, rutas(nombre_ruta), fabricas(nombre,codigo)').order('created_at', { ascending: false })
+    const ganaderoQ = supabase.from('ganaderos').select('*, rutas!ruta_id(nombre_ruta), fabricas(nombre,codigo)').order('created_at', { ascending: false })
     const rutaQ = supabase.from('rutas').select('id, nombre_ruta, codigo_ruta')
     const fabQ = supabase.from('fabricas').select('id, nombre, codigo').order('nombre')
     if (selectedFabricaId && selectedFabricaId !== 'all') {

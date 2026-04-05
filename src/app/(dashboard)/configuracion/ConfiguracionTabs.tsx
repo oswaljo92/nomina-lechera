@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle, Calendar, Star, ToggleLeft, ToggleRight, Droplets, Truck } from 'lucide-react'
+import { Plus, Users, FileSpreadsheet, Settings2, RefreshCcw, Loader2, Upload, Download, Trash2, Undo2, Edit2, X, Search, Calculator, Save, History, Image as ImageIcon, CheckCircle2, Building2, Receipt, AlertTriangle, Calendar, Star, ToggleLeft, ToggleRight, Droplets, Truck, Check, ChevronDown } from 'lucide-react'
 import { toPng } from 'html-to-image'
 import { logAction } from '@/lib/log-utils'
 import * as XLSX from 'xlsx'
@@ -1256,7 +1256,7 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         }
         
         // Cargar ganaderos para el dropdown
-        const { data: gs } = await supabase.from('ganaderos').select('codigo_ganadero, nombre, grupo, rutas(nombre_ruta, codigo_ruta)').eq('activo', true)
+        const { data: gs } = await supabase.from('ganaderos').select('codigo_ganadero, nombre, grupo, rutas!ruta_id(nombre_ruta, codigo_ruta)').eq('activo', true)
         if (gs) setGanaderosList(gs)
      }
      pop()
@@ -1290,7 +1290,7 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
     // 1. Buscar todos los ganaderos activos
     const { data: gans } = await supabase
       .from('ganaderos')
-      .select('id, codigo_ganadero, nombre, grupo, rutas(nombre_ruta, codigo_ruta, fabricas(nombre, codigo))')
+      .select('id, codigo_ganadero, nombre, grupo, rutas!ruta_id(nombre_ruta, codigo_ruta, fabricas(nombre, codigo))')
       .eq('activo', true)
     // 2. Buscar los precios de la semana
     const { data: precsData } = await supabase
@@ -2039,6 +2039,8 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
 
   const [fabricas, setFabricas] = useState<any[]>([])
   const [selectedFabricaId, setSelectedFabricaId] = useState('')
+  const [fabricaDropdownOpen, setFabricaDropdownOpen] = useState(false)
+  const fabricaDropdownRef = useRef<HTMLDivElement>(null)
 
   const [rutas, setRutas] = useState<any[]>([])
   const [ganaderosMap, setGanaderosMap] = useState<Record<string, any[]>>({}) // ruta_id → ganaderos[]
@@ -2065,8 +2067,8 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
         const sel = exist || tasas[0]
         if (sel) { setSelectedSemana(sel.fecha); setTasaBase(sel.tasa) }
       }
-      // Fábricas
-      const { data: fabs } = await supabase.from('fabricas').select('id, codigo, nombre').order('nombre')
+      // Fábricas — ordenadas por código de menor a mayor
+      const { data: fabs } = await supabase.from('fabricas').select('id, codigo, nombre').order('codigo')
       if (fabs && fabs.length > 0) { setFabricas(fabs); setSelectedFabricaId(fabs[0].id) }
     }
     init()
@@ -2189,11 +2191,43 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
             <p className="text-xs text-slate-500 mt-0.5">Precio base por litro para códigos 90 (faltante) y 92 (agua) — por ruta y semana.</p>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
-            {/* Fábrica */}
-            <select value={selectedFabricaId} onChange={e => setSelectedFabricaId(e.target.value)}
-              className="border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold bg-white focus:ring-2 focus:ring-orange-400">
-              {fabricas.map(f => <option key={f.id} value={f.id}>{f.codigo} — {f.nombre}</option>)}
-            </select>
+            {/* Fábrica — dropdown estilo Sidebar */}
+            <div className="relative" ref={fabricaDropdownRef}>
+              <button
+                type="button"
+                onClick={() => setFabricaDropdownOpen(o => !o)}
+                className="flex items-center justify-between gap-2 bg-white border border-slate-300 hover:border-blue-400 text-gray-900 rounded-lg px-3 py-2 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[160px]"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <Check className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                  <span className="text-xs font-bold truncate text-gray-900">
+                    {fabricas.find(f => f.id === selectedFabricaId)?.nombre || 'Seleccionar...'}
+                  </span>
+                </div>
+                <ChevronDown className={`text-gray-500 shrink-0 transition-transform duration-200 ${fabricaDropdownOpen ? 'rotate-180' : ''}`} size={14} />
+              </button>
+              {fabricaDropdownOpen && (
+                <>
+                  <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-lg shadow-2xl overflow-hidden z-50 min-w-[200px]">
+                    {fabricas.map(f => {
+                      const isSelected = f.id === selectedFabricaId
+                      return (
+                        <button key={f.id} type="button"
+                          onMouseDown={e => { e.preventDefault(); setSelectedFabricaId(f.id); setFabricaDropdownOpen(false) }}
+                          className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'}`}>
+                          <div className="min-w-0">
+                            <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{f.nombre}</div>
+                            <div className="text-[10px] text-gray-500 mt-0.5">Cód. {f.codigo}</div>
+                          </div>
+                          {isSelected && <Check className="h-4 w-4 text-blue-500 shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="fixed inset-0 z-40" onClick={() => setFabricaDropdownOpen(false)} />
+                </>
+              )}
+            </div>
             {/* Semana */}
             <div className="relative">
               <button onClick={() => setSemanaDropdownOpen(o => !o)}

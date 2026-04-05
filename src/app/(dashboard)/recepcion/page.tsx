@@ -83,7 +83,7 @@ export default function RecepcionPage() {
 
       // En modo "Todas", cargamos todos los catálogos; se filtrarán al elegir fábrica
       const rutasQuery = supabase.from('rutas').select('*').eq('activo', true)
-      const ganaderoQuery = supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true)
+      const ganaderoQuery = supabase.from('ganaderos').select('*, rutas!ruta_id(nombre_ruta)').eq('activo', true)
 
       if (selectedFabricaId && selectedFabricaId !== 'all') {
         rutasQuery.eq('fabrica_id', selectedFabricaId)
@@ -111,7 +111,7 @@ export default function RecepcionPage() {
     async function reloadCatalogos() {
       const [resRutas, resGanaderos] = await Promise.all([
         supabase.from('rutas').select('*').eq('activo', true).eq('fabrica_id', fabricaParaCarga),
-        supabase.from('ganaderos').select('*, rutas(nombre_ruta)').eq('activo', true).eq('fabrica_id', fabricaParaCarga)
+        supabase.from('ganaderos').select('*, rutas!ruta_id(nombre_ruta)').eq('activo', true).eq('fabrica_id', fabricaParaCarga)
       ])
       if (resRutas.data) setRutas(resRutas.data)
       if (resGanaderos.data) setGanaderos(resGanaderos.data)
