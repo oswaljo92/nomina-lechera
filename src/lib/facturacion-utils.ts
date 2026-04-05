@@ -82,15 +82,18 @@ export function calcularFactura(params: {
     deducciones, incluye_flete,
   } = params
 
-  const base_bs = litros_a_pagar * precio_leche_usd * tasa_miercoles
-  const nota_debito_leche_bs = litros_a_pagar * precio_leche_usd * (tasa_factura - tasa_miercoles)
+  // Precios redondeados a 3 decimales para cálculo consistente
+  const pl = Math.round(precio_leche_usd * 1000) / 1000
+  const pf = Math.round(precio_flete_usd * 1000) / 1000
+
+  const base_bs = litros_a_pagar * pl * tasa_miercoles
+  const nota_debito_leche_bs = litros_a_pagar * pl * (tasa_factura - tasa_miercoles)
 
   let flete_bs = 0
   let nota_debito_flete_bs = 0
-  if (incluye_flete && litros_flete > 0 && precio_flete_usd > 0) {
-    flete_bs = litros_flete * precio_flete_usd * tasa_miercoles
-    // Fórmula simétrica a leche (se omite el tasa_miercoles duplicado del spec — typo)
-    nota_debito_flete_bs = litros_flete * precio_flete_usd * (tasa_factura - tasa_miercoles)
+  if (incluye_flete && litros_flete > 0 && pf > 0) {
+    flete_bs = litros_flete * pf * tasa_miercoles
+    nota_debito_flete_bs = litros_flete * pf * (tasa_factura - tasa_miercoles)
   }
 
   const nota_debito_total_bs = nota_debito_leche_bs + nota_debito_flete_bs

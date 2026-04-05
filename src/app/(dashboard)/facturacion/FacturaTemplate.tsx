@@ -117,7 +117,7 @@ export default function FacturaTemplate({
               Tasa inicio semana: {fmtNum(factura.tasa_miercoles, 3)} Bs/$
             </p>
             <p className="text-slate-500">
-              Tasa fecha factura: {fmtNum(factura.tasa_factura, 3)} Bs/$
+              Tasa factura: {fmtNum(factura.tasa_factura, 3)} Bs/$
             </p>
           </div>
         </div>
@@ -127,18 +127,16 @@ export default function FacturaTemplate({
       <div className="px-8 py-4">
         <table className="w-full text-xs table-fixed">
           <colgroup>
-            <col className="w-[42%]" />
-            <col className="w-[13%]" />
-            <col className="w-[16%]" />
-            <col className="w-[13%]" />
-            <col className="w-[16%]" />
+            <col className="w-[44%]" />
+            <col className="w-[15%]" />
+            <col className="w-[22%]" />
+            <col className="w-[19%]" />
           </colgroup>
           <thead>
             <tr className="border-b-2 border-slate-300">
               <th className="text-left py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Concepto</th>
               <th className="text-right py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Litros</th>
-              <th className="text-right py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Precio USD</th>
-              <th className="text-right py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Tasa</th>
+              <th className="text-right py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Precio Bs/L</th>
               <th className="text-right py-2 text-slate-500 font-semibold uppercase tracking-wider text-[10px]">Total {sym}</th>
             </tr>
           </thead>
@@ -150,8 +148,7 @@ export default function FacturaTemplate({
                 <tr>
                   <td className="py-2.5 font-medium text-slate-700">Leche cruda — {fmtNum(factura.litros_a_pagar, 0)} L</td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_a_pagar, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtUSD(factura.precio_leche_usd)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.tasa_miercoles, 3)}</td>
+                  <td className="py-2.5 text-right text-slate-600">{fmtBs(factura.precio_leche_usd * factura.tasa_miercoles)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.base_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -160,9 +157,8 @@ export default function FacturaTemplate({
                       Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_a_pagar, 0)}</td>
-                    <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_leche_usd)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)}
+                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_leche_bs)}</td>
                   </tr>
@@ -170,7 +166,7 @@ export default function FacturaTemplate({
               </>
             )}
 
-            {/* Flete */}
+            {/* Flete ganadero_transportista */}
             {incluyeFlete && factura.litros_flete != null && factura.precio_flete_usd != null && (
               <>
                 <tr>
@@ -178,8 +174,7 @@ export default function FacturaTemplate({
                     Servicio de flete — {fmtNum(factura.litros_flete, 0)} L
                   </td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_flete, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtUSD(factura.precio_flete_usd)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.tasa_miercoles, 3)}</td>
+                  <td className="py-2.5 text-right text-slate-600">{fmtBs(factura.precio_flete_usd * factura.tasa_miercoles)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.flete_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -188,9 +183,8 @@ export default function FacturaTemplate({
                       Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
-                    <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_flete_usd)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)}
+                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_flete_bs)}</td>
                   </tr>
@@ -206,8 +200,7 @@ export default function FacturaTemplate({
                     Servicio de flete — {fmtNum(factura.litros_flete, 0)} L
                   </td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_flete, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtUSD(factura.precio_flete_usd ?? 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.tasa_miercoles, 3)}</td>
+                  <td className="py-2.5 text-right text-slate-600">{fmtBs((factura.precio_flete_usd ?? 0) * factura.tasa_miercoles)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.flete_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -216,9 +209,8 @@ export default function FacturaTemplate({
                       Nota de débito diferencial semana N° {semanaNum}
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
-                    <td className="py-2 text-right text-amber-600">{fmtUSD(factura.precio_flete_usd ?? 0)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)}
+                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_flete_bs)}</td>
                   </tr>

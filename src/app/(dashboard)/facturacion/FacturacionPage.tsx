@@ -101,6 +101,7 @@ export default function FacturacionPage() {
   const [deleteTarget, setDeleteTarget] = useState<Factura | null>(null)
   const [isDeleteBulkOpen, setIsDeleteBulkOpen] = useState(false)
   const [semDropOpen, setSemDropOpen] = useState(false)
+  const [genFechaEmision, setGenFechaEmision] = useState('')
 
   // Exportación
   const [exporting, setExporting] = useState(false)
@@ -588,7 +589,7 @@ export default function FacturacionPage() {
           tercero_codigo: item.codigo,
           tercero_nombre: item.nombre,
           tercero_rif: item.rif,
-          fecha_emision: filtroSemana,
+          fecha_emision: genFechaEmision || new Date().toISOString().split('T')[0],
           numero_factura: null,
           tasa_miercoles: item.tasa,
           tasa_factura: item.tasa,
@@ -1049,9 +1050,21 @@ export default function FacturacionPage() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto overflow-hidden animate-in zoom-in-95">
             <div className="flex justify-between items-center bg-amber-50 border-b border-amber-200 px-6 py-4">
-              <div>
+              <div className="space-y-1">
                 <h3 className="font-black text-slate-800 flex items-center gap-2"><Zap size={16} className="text-amber-500" /> Generar Facturas Automáticamente</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Semana: {filtroSemana ? formatSemanaGanadera(filtroSemana) : '—'}</p>
+                <p className="text-xs text-slate-500">Semana ganadera: {filtroSemana ? formatSemanaGanadera(filtroSemana) : '—'}</p>
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="text-xs text-slate-500 whitespace-nowrap">Fecha de emisión de factura:</label>
+                  <input
+                    type="date"
+                    value={genFechaEmision}
+                    onChange={e => setGenFechaEmision(e.target.value)}
+                    className="text-xs border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                  />
+                  {genFechaEmision && (
+                    <button onClick={() => setGenFechaEmision('')} className="text-xs text-slate-400 hover:text-slate-600">Usar hoy</button>
+                  )}
+                </div>
               </div>
               {!genRunning && !genDone && (
                 <button onClick={() => setIsGenModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
@@ -1156,12 +1169,12 @@ export default function FacturacionPage() {
               </span>
               <div className="flex gap-3">
                 {genDone ? (
-                  <button onClick={() => { setIsGenModalOpen(false); setGenDone(false); setGenPreview([]) }}
+                  <button onClick={() => { setIsGenModalOpen(false); setGenDone(false); setGenPreview([]); setGenFechaEmision('') }}
                     className="bg-blue-600 text-white font-black px-5 py-2.5 rounded-xl shadow-sm">Cerrar</button>
                 ) : (
                   <>
                     {!genRunning && (
-                      <button onClick={() => setIsGenModalOpen(false)} className="bg-slate-100 text-slate-600 font-bold px-5 py-2.5 rounded-xl">Cancelar</button>
+                      <button onClick={() => { setIsGenModalOpen(false); setGenFechaEmision('') }} className="bg-slate-100 text-slate-600 font-bold px-5 py-2.5 rounded-xl">Cancelar</button>
                     )}
                     <button onClick={runAutoGen}
                       disabled={genRunning || genLoading || genSelected.size === 0}
