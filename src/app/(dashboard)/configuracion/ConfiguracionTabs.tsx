@@ -3345,12 +3345,12 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
   }, [])
 
   const tabsItems = [
-    { id: 'semanas', label: 'Semanas Ganaderas', shortLabel: 'Semanas', icon: Calendar, iconSize: 18 },
+    { id: 'semanas', label: 'Semanas Ganaderas', shortLabel: 'Semanas', icon: Calendar, iconSize: 20 },
     { id: 'usuarios', label: 'Usuarios', shortLabel: 'Usuarios', icon: Users, iconSize: 18 },
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw, iconSize: 18 },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet, iconSize: 18 },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator, iconSize: 18 },
-    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck, iconSize: 18 },
+    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck, iconSize: 20 },
     { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2, iconSize: 18 },
     { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt, iconSize: 18 },
     { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, iconSize: 18, adminOnly: true },
