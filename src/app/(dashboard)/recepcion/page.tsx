@@ -50,6 +50,7 @@ export default function RecepcionPage() {
     ruta_id: string,
     nombre_ruta: string,
     litros_romana: number,
+    agua_transporte: number,
     fecha: string
   }>({
     ticket_romana: '',
@@ -58,6 +59,7 @@ export default function RecepcionPage() {
     ruta_id: '',
     nombre_ruta: '',
     litros_romana: 0,
+    agua_transporte: 0,
     fecha: new Date().toISOString().split('T')[0]
   })
 
@@ -165,6 +167,7 @@ export default function RecepcionPage() {
        ruta_id: '',
        nombre_ruta: '',
        litros_romana: 0,
+       agua_transporte: 0,
        fecha: new Date().toISOString().split('T')[0]
      })
      setDetalles([])
@@ -179,6 +182,7 @@ export default function RecepcionPage() {
        ruta_id: hc.ruta_id,
        nombre_ruta: hc.rutas?.nombre_ruta || '',
        litros_romana: hc.litros_romana,
+       agua_transporte: hc.agua_transporte || 0,
        fecha: new Date(hc.fecha_ingreso).toISOString().split('T')[0]
      })
      
@@ -316,6 +320,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
+         agua_transporte: camion.agua_transporte || 0,
          fecha_ingreso: camion.fecha + 'T12:00:00Z',
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).eq('id', camion.id)
@@ -333,6 +338,7 @@ export default function RecepcionPage() {
          placa: camion.placa,
          ruta_id: camion.ruta_id,
          litros_romana: camion.litros_romana,
+         agua_transporte: camion.agua_transporte || 0,
          fecha_ingreso: camion.fecha + 'T12:00:00Z',
          ...(fabricaIdParaGuardar ? { fabrica_id: fabricaIdParaGuardar } : {})
        }).select().single()
@@ -1027,9 +1033,14 @@ export default function RecepcionPage() {
                   <input type="text" readOnly className="w-full bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-sm font-bold text-slate-400" value={camion.nombre_ruta} />
                 </div>
                 
-                <div className="sm:col-span-2 lg:col-span-2">
+                <div className="sm:col-span-2 lg:col-span-1">
                   <label className="block text-[10px] font-black text-blue-600 uppercase mb-1.5">Litros Romana (Bruto)</label>
                   <input type="number" className="w-full bg-blue-50 border border-blue-200 rounded-lg p-3 text-xl font-black text-blue-900" value={camion.litros_romana || ''} onChange={e => setCamion({...camion, litros_romana: Number(e.target.value)})}/>
+                </div>
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label className="block text-[10px] font-black text-orange-500 uppercase mb-1.5">Agua a Transporte (L)</label>
+                  <input type="number" min="0" step="0.01" className="w-full bg-orange-50 border border-orange-200 rounded-lg p-3 text-xl font-black text-orange-800" value={camion.agua_transporte || ''} placeholder="0" onChange={e => setCamion({...camion, agua_transporte: Number(e.target.value)})}/>
+                  <p className="text-[9px] text-orange-400 mt-1 font-semibold">Solo estadísticas y deducción cód. 92</p>
                 </div>
                 <div className="sm:col-span-2 lg:col-span-3 flex flex-col sm:flex-row items-center gap-4 sm:gap-6 pt-4 lg:pt-6">
                    <div className="w-full sm:flex-1">

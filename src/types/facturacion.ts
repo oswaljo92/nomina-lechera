@@ -15,6 +15,8 @@ export interface FacturaDeduccion {
   codigo: string
   nombre: string
   monto_bs: number
+  litros?: number       // litros afectados (090 faltante / 92 agua)
+  precio_usd?: number   // precio unitario USD/L usado
   created_at?: string
 }
 

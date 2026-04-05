@@ -1,16 +1,18 @@
 'use client'
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import {
   Plus, Search, FileText, Image as ImageIcon, Trash2, Edit2, Eye,
   Loader2, Download, FileArchive, X, CheckCircle2, History, AlertCircle,
+  Zap, Users, Truck, Droplets, TrendingDown, DollarSign, Milk,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useFabrica } from '@/contexts/FabricaContext'
 import { logAction } from '@/lib/log-utils'
 import {
   fmtBs, fmtUSD, formatDateDisplay, formatSemanaGanadera,
-  buildFacturaFilename,
+  buildFacturaFilename, calcularFactura, getCurrentWednesday,
+  getWednesdayOfDate,
 } from '@/lib/facturacion-utils'
 import {
   downloadFacturaPDF, downloadFacturaImage, exportFacturasToZip,
@@ -32,6 +34,26 @@ const ESTADO_STYLES: Record<string, string> = {
   anulada: 'bg-red-100 text-red-600',
 }
 
+interface GenPreviewItem {
+  key: string          // unique: ganadero_id or ruta_id
+  tipo: 'ganadero' | 'transportista' | 'ganadero_transportista'
+  codigo: string
+  nombre: string
+  rif: string | null
+  litros: number
+  litros_faltantes?: number
+  litros_agua?: number
+  precio_leche_usd: number
+  precio_flete_usd: number
+  existingFacturaId: string | null  // null = new
+  // raw data for building the factura
+  ganadero_id: string | null
+  ruta_id: string | null
+  tasa: number
+  emisor: { razon_social: string; rif: string; direccion_fiscal: string }
+  precio_deduccion_usd: number  // for 090/92
+}
+
 export default function FacturacionPage() {
   const supabase = createClient()
   const { selectedFabricaId, fabricas, isAllFabricas } = useFabrica()
@@ -45,6 +67,21 @@ export default function FacturacionPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [filtroSemana, setFiltroSemana] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
+
+  // Tab de tipo
+  const [tabTipo, setTabTipo] = useState<'todos' | 'ganadero' | 'transportista'>('todos')
+
+  // Auto-generación
+  const [isGenModalOpen, setIsGenModalOpen] = useState(false)
+  const [genLoading, setGenLoading] = useState(false)
+  const [genPreview, setGenPreview] = useState<GenPreviewItem[]>([])
+  const [genSelected, setGenSelected] = useState<Set<string>>(new Set())
+  const [genRunning, setGenRunning] = useState(false)
+  const [genProgress, setGenProgress] = useState({ done: 0, total: 0, errors: 0 })
+  const [genDone, setGenDone] = useState(false)
+
+  // Tasa BCV de inicio de semana actual
+  const [tasaSemanaActual, setTasaSemanaActual] = useState(0)
 
   // Paginación
   const [currentPage, setCurrentPage] = useState(0)
@@ -82,6 +119,12 @@ export default function FacturacionPage() {
     const { data: fabData } = await fabQ
     setFabricasConFiscal(fabData ?? [])
 
+    // Tasa BCV de inicio de semana actual
+    const wedStr = getCurrentWednesday()
+    const { data: tasaData } = await supabase.from('tasas_bcv')
+      .select('tasa').eq('fecha', wedStr).maybeSingle()
+    if (tasaData) setTasaSemanaActual(tasaData.tasa)
+
     let q = supabase
       .from('facturas')
       .select('*, fabricas(nombre, codigo), facturas_deducciones(*)')
@@ -92,7 +135,16 @@ export default function FacturacionPage() {
     }
 
     const { data } = await q
-    setFacturas((data ?? []) as Factura[])
+    const allFacturas = (data ?? []) as Factura[]
+    setFacturas(allFacturas)
+
+    // Auto-seleccionar semana vigente si no hay filtro
+    if (!filtroSemana) {
+      const vigente = allFacturas.find(f => f.semana_fecha === wedStr)
+      if (vigente) setFiltroSemana(wedStr)
+      else if (allFacturas.length > 0) setFiltroSemana(allFacturas[0].semana_fecha)
+    }
+
     setLoading(false)
   }
 
@@ -100,7 +152,15 @@ export default function FacturacionPage() {
   const filtered = useMemo(() => {
     let list = facturas
     if (filtroSemana) list = list.filter(f => f.semana_fecha === filtroSemana)
-    if (filtroTipo) list = list.filter(f => f.tipo === filtroTipo)
+    // tabTipo overrides filtroTipo when not 'todos'
+    const tipoFilter = tabTipo !== 'todos' ? tabTipo : filtroTipo
+    if (tipoFilter) list = list.filter(f =>
+      tipoFilter === 'transportista'
+        ? (f.tipo === 'transportista' || f.tipo === 'ganadero_transportista')
+        : tipoFilter === 'ganadero'
+          ? (f.tipo === 'ganadero' || f.tipo === 'ganadero_transportista')
+          : f.tipo === tipoFilter
+    )
     if (searchTerm) {
       const t = searchTerm.toLowerCase()
       list = list.filter(f =>
@@ -111,7 +171,7 @@ export default function FacturacionPage() {
       )
     }
     return list
-  }, [facturas, filtroSemana, filtroTipo, searchTerm])
+  }, [facturas, filtroSemana, filtroTipo, searchTerm, tabTipo])
 
   const totalPages = Math.ceil(filtered.length / pageSize)
   const paged = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
@@ -248,16 +308,267 @@ export default function FacturacionPage() {
     setExporting(false)
   }
 
-  // ── KPIs ───────────────────────────────────────────────────────────────────
+  // ── KPIs por semana seleccionada ───────────────────────────────────────────
   const kpis = useMemo(() => {
-    const emitidas = facturas.filter(f => f.estado === 'emitida')
-    return {
-      total: facturas.length,
-      totalBs: emitidas.reduce((s, f) => s + Number(f.total_bs), 0),
-      totalUSD: emitidas.reduce((s, f) => s + (f.total_bs / (f.tasa_factura || 1)), 0),
-      semanas: new Set(facturas.map(f => f.semana_fecha)).size,
+    const semList = filtroSemana ? facturas.filter(f => f.semana_fecha === filtroSemana) : facturas
+    const emitidas = semList.filter(f => f.estado !== 'anulada')
+    const ganaderosList = emitidas.filter(f => f.tipo === 'ganadero' || f.tipo === 'ganadero_transportista')
+    const totalLitrosPagados = ganaderosList.reduce((s, f) => s + Number(f.litros_a_pagar || 0), 0)
+    const totalBs = emitidas.reduce((s, f) => s + Number(f.total_bs), 0)
+    const totalUSD = emitidas.reduce((s, f) => s + (f.total_bs / (f.tasa_factura || 1)), 0)
+    // Faltantes y agua: leer de deducciones
+    const allDeds = emitidas.flatMap(f => f.facturas_deducciones ?? [])
+    const litrosFaltantes = allDeds.filter(d => d.codigo === '90').reduce((s, d) => s + Number(d.litros || 0), 0)
+    const litrosAgua = allDeds.filter(d => d.codigo === '92').reduce((s, d) => s + Number(d.litros || 0), 0)
+    return { totalLitrosPagados, totalBs, totalUSD, litrosFaltantes, litrosAgua }
+  }, [facturas, filtroSemana])
+
+  // ── Cargar preview de auto-generación ─────────────────────────────────────
+  const buildGenPreview = useCallback(async () => {
+    if (!filtroSemana || (!selectedFabricaId || selectedFabricaId === 'all')) return
+    setGenLoading(true)
+    setGenPreview([])
+    setGenDone(false)
+
+    // Semana: miércoles (filtroSemana) a martes +6 días
+    const wedDate = new Date(filtroSemana + 'T12:00:00')
+    const tueDate = new Date(wedDate); tueDate.setDate(wedDate.getDate() + 6)
+    const fechaInicio = filtroSemana
+    const fechaFin = `${tueDate.getFullYear()}-${String(tueDate.getMonth()+1).padStart(2,'0')}-${String(tueDate.getDate()).padStart(2,'0')}`
+
+    // Tasa BCV del miércoles
+    const { data: tasaRow } = await supabase.from('tasas_bcv').select('tasa').eq('fecha', filtroSemana).maybeSingle()
+    const tasa = tasaRow?.tasa || 0
+
+    // Fábrica emisor
+    const emisorFab = fabricasConFiscal.find(f => f.id === selectedFabricaId)
+    const emisor = { razon_social: emisorFab?.razon_social || '', rif: emisorFab?.rif || '', direccion_fiscal: emisorFab?.direccion_fiscal || '' }
+
+    // Recepciones del período
+    const { data: camiones } = await supabase.from('recepciones_camion')
+      .select('id, ruta_id, litros_romana, agua_transporte, rutas(id, codigo_ruta, nombre_ruta, cedula, rif, grupo, ganadero_id), recepciones_detalle(ganadero_id, litros_recepcion, litros_a_pagar, ganaderos(id, codigo_ganadero, nombre, cedula, rif, grupo))')
+      .eq('fabrica_id', selectedFabricaId)
+      .gte('fecha_ingreso', fechaInicio + 'T00:00:00Z')
+      .lte('fecha_ingreso', fechaFin + 'T23:59:59Z')
+
+    // Precios semanales
+    const { data: preciosData } = await supabase.from('precios_semanales').select('*').eq('fecha_semana', filtroSemana)
+    const precios = preciosData || []
+
+    // Precios deducciones
+    const { data: precDeducData } = await supabase.from('precios_deducciones').select('*')
+      .eq('fecha_semana', filtroSemana).eq('fabrica_id', selectedFabricaId)
+
+    // Facturas ya existentes en esta semana
+    const { data: existingFacts } = await supabase.from('facturas').select('id, ganadero_id, ruta_id, tipo')
+      .eq('fabrica_id', selectedFabricaId).eq('semana_fecha', filtroSemana).neq('estado', 'anulada')
+
+    const getPrecioLeche = (codigoGanadero: string): number => {
+      const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
+      return p?.precio_leche_usd || 0
     }
-  }, [facturas])
+    const getPrecioFlete = (codigoRuta: string): number => {
+      const p = precios.find(pr => (pr.rutas as string[]).includes(codigoRuta))
+      return p?.precio_flete_usd || 0
+    }
+
+    const items: GenPreviewItem[] = []
+    const camionesArr = camiones || []
+
+    // ── Por ganadero ──
+    const ganaderoMap: Record<string, { ganadero: any; litros: number }> = {}
+    for (const cam of camionesArr) {
+      for (const det of (cam.recepciones_detalle as any[] || [])) {
+        const g = det.ganaderos
+        if (!g) continue
+        const key = g.id
+        if (!ganaderoMap[key]) ganaderoMap[key] = { ganadero: g, litros: 0 }
+        ganaderoMap[key].litros += Number(det.litros_a_pagar || det.litros_recepcion || 0)
+      }
+    }
+
+    // ── Por ruta (transportista) ──
+    const rutaMap: Record<string, { ruta: any; litrosFlete: number; litrosRomana: number; litrosGanaderos: number; litrosAgua: number }> = {}
+    for (const cam of camionesArr) {
+      const r = (cam as any).rutas
+      if (!r) continue
+      const key = r.id
+      if (!rutaMap[key]) rutaMap[key] = { ruta: r, litrosFlete: 0, litrosRomana: 0, litrosGanaderos: 0, litrosAgua: 0 }
+      rutaMap[key].litrosRomana += Number((cam as any).litros_romana || 0)
+      rutaMap[key].litrosAgua += Number((cam as any).agua_transporte || 0)
+      const sumDet = (cam.recepciones_detalle as any[] || []).reduce((s: number, d: any) => s + Number(d.litros_a_pagar || d.litros_recepcion || 0), 0)
+      rutaMap[key].litrosGanaderos += sumDet
+      rutaMap[key].litrosFlete += sumDet
+    }
+
+    // Check which ganaderos own their ruta
+    const ganaderosConRutaPropia = new Set<string>()
+    for (const [, rv] of Object.entries(rutaMap)) {
+      if (rv.ruta.ganadero_id && ganaderoMap[rv.ruta.ganadero_id]) {
+        ganaderosConRutaPropia.add(rv.ruta.ganadero_id)
+      }
+    }
+
+    // Build GANADERO / GANADERO_TRANSPORTISTA items
+    for (const [gid, { ganadero, litros }] of Object.entries(ganaderoMap)) {
+      const esTransportista = ganaderosConRutaPropia.has(gid)
+      const tipo: GenPreviewItem['tipo'] = esTransportista ? 'ganadero_transportista' : 'ganadero'
+      const ruta = esTransportista ? Object.values(rutaMap).find(rv => rv.ruta.ganadero_id === gid) : null
+      const existFact = (existingFacts || []).find(ef => ef.ganadero_id === gid && (ef.tipo === tipo || ef.tipo === 'ganadero_transportista'))
+      const precioLeche = getPrecioLeche(ganadero.codigo_ganadero)
+      const precioFlete = ruta ? getPrecioFlete(ruta.ruta.codigo_ruta) : 0
+      const litrosFaltantes = ruta ? Math.max(0, ruta.litrosRomana - ruta.litrosGanaderos) : 0
+      const litrosAgua = ruta ? ruta.litrosAgua : 0
+      const precDeducRuta = ruta ? (precDeducData || []).find(pd => pd.ruta_id === ruta.ruta.id) : null
+
+      items.push({
+        key: gid,
+        tipo,
+        codigo: ganadero.codigo_ganadero,
+        nombre: ganadero.nombre,
+        rif: ganadero.rif || ganadero.cedula || null,
+        litros,
+        litros_faltantes: litrosFaltantes,
+        litros_agua: litrosAgua,
+        precio_leche_usd: precioLeche,
+        precio_flete_usd: precioFlete,
+        existingFacturaId: existFact?.id || null,
+        ganadero_id: gid,
+        ruta_id: ruta?.ruta.id || null,
+        tasa,
+        emisor,
+        precio_deduccion_usd: precDeducRuta?.precio_deduccion_usd || 0,
+      })
+    }
+
+    // Build TRANSPORTISTA items (rutas sin ganadero propio)
+    for (const [rid, rv] of Object.entries(rutaMap)) {
+      if (rv.ruta.ganadero_id && ganaderoMap[rv.ruta.ganadero_id]) continue // ya incluido como ganadero_transportista
+      const existFact = (existingFacts || []).find(ef => ef.ruta_id === rid && ef.tipo === 'transportista')
+      const precioFlete = getPrecioFlete(rv.ruta.codigo_ruta)
+      const litrosFaltantes = Math.max(0, rv.litrosRomana - rv.litrosGanaderos)
+      const precDeducRuta = (precDeducData || []).find(pd => pd.ruta_id === rid)
+
+      items.push({
+        key: rid,
+        tipo: 'transportista',
+        codigo: rv.ruta.codigo_ruta,
+        nombre: rv.ruta.nombre_ruta,
+        rif: rv.ruta.rif || rv.ruta.cedula || null,
+        litros: rv.litrosFlete,
+        litros_faltantes: litrosFaltantes,
+        litros_agua: rv.litrosAgua,
+        precio_leche_usd: 0,
+        precio_flete_usd: precioFlete,
+        existingFacturaId: existFact?.id || null,
+        ganadero_id: null,
+        ruta_id: rid,
+        tasa,
+        emisor,
+        precio_deduccion_usd: precDeducRuta?.precio_deduccion_usd || 0,
+      })
+    }
+
+    setGenPreview(items)
+    // Pre-select: all NEW by default, existing unchecked
+    setGenSelected(new Set(items.filter(i => !i.existingFacturaId).map(i => i.key)))
+    setGenLoading(false)
+  }, [filtroSemana, selectedFabricaId, fabricasConFiscal])
+
+  // ── Ejecutar auto-generación ───────────────────────────────────────────────
+  const runAutoGen = async () => {
+    const toGen = genPreview.filter(i => genSelected.has(i.key))
+    if (toGen.length === 0) return
+    setGenRunning(true)
+    setGenProgress({ done: 0, total: toGen.length, errors: 0 })
+    let errors = 0
+
+    for (let i = 0; i < toGen.length; i++) {
+      const item = toGen[i]
+      try {
+        const incluyeFlete = item.tipo === 'transportista' || item.tipo === 'ganadero_transportista'
+        const semNombre = formatSemanaGanadera(filtroSemana)
+
+        // Deducciones 090 y 92 solo para transportistas/ganadero_transportista
+        const deducciones: FacturaDeduccion[] = []
+        if (incluyeFlete && item.precio_deduccion_usd > 0) {
+          if ((item.litros_faltantes || 0) > 0) {
+            const montoBs = (item.litros_faltantes || 0) * item.precio_deduccion_usd * item.tasa
+            deducciones.push({ codigo: '90', nombre: 'Deducción por faltante', monto_bs: montoBs, litros: item.litros_faltantes, precio_usd: item.precio_deduccion_usd })
+          }
+          if ((item.litros_agua || 0) > 0) {
+            const montoBs = (item.litros_agua || 0) * item.precio_deduccion_usd * item.tasa
+            deducciones.push({ codigo: '92', nombre: 'Deducción por Desviación', monto_bs: montoBs, litros: item.litros_agua, precio_usd: item.precio_deduccion_usd })
+          }
+        }
+
+        const calc = calcularFactura({
+          litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
+          litros_flete: incluyeFlete ? item.litros : 0,
+          precio_leche_usd: item.precio_leche_usd,
+          precio_flete_usd: item.precio_flete_usd,
+          tasa_miercoles: item.tasa,
+          tasa_factura: item.tasa,
+          deducciones,
+          incluye_flete: incluyeFlete,
+        })
+
+        const facturaPayload = {
+          fabrica_id: selectedFabricaId,
+          semana_fecha: filtroSemana,
+          semana_nombre: semNombre,
+          tipo: item.tipo,
+          ganadero_id: item.ganadero_id,
+          ruta_id: item.ruta_id,
+          tercero_codigo: item.codigo,
+          tercero_nombre: item.nombre,
+          tercero_rif: item.rif,
+          fecha_emision: filtroSemana,
+          numero_factura: null,
+          tasa_miercoles: item.tasa,
+          tasa_factura: item.tasa,
+          precio_leche_usd: item.precio_leche_usd,
+          precio_flete_usd: incluyeFlete ? item.precio_flete_usd : null,
+          litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
+          litros_flete: incluyeFlete ? item.litros : null,
+          ...calc,
+          emisor_razon_social: item.emisor.razon_social,
+          emisor_rif: item.emisor.rif,
+          emisor_direccion: item.emisor.direccion_fiscal,
+          estado: 'emitida',
+          notas: null,
+          updated_at: new Date().toISOString(),
+        }
+
+        let facturaId: string | null = null
+        if (item.existingFacturaId && genSelected.has(item.key)) {
+          // Reemplazar: update factura + borrar deducciones viejas
+          const { error } = await supabase.from('facturas').update(facturaPayload).eq('id', item.existingFacturaId)
+          if (!error) {
+            facturaId = item.existingFacturaId
+            await supabase.from('facturas_deducciones').delete().eq('factura_id', facturaId)
+          } else errors++
+        } else {
+          const { data: fData, error } = await supabase.from('facturas').insert(facturaPayload).select('id').single()
+          if (!error && fData) facturaId = fData.id
+          else errors++
+        }
+
+        if (facturaId && deducciones.length > 0) {
+          await supabase.from('facturas_deducciones').insert(
+            deducciones.map(d => ({ factura_id: facturaId, codigo: d.codigo, nombre: d.nombre, monto_bs: d.monto_bs, litros: d.litros || 0, precio_usd: d.precio_usd || 0 }))
+          )
+        }
+      } catch { errors++ }
+
+      setGenProgress({ done: i + 1, total: toGen.length, errors })
+    }
+
+    logAction(supabase, curUser, 'Facturación', 'AUTO_GENERAR', `Generadas ${toGen.length - errors} facturas semana ${filtroSemana}. Errores: ${errors}`)
+    setGenRunning(false)
+    setGenDone(true)
+    load()
+  }
 
   if (loading) {
     return (
@@ -275,72 +586,83 @@ export default function FacturacionPage() {
           <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Facturación</h1>
           <p className="text-slate-500 mt-1">Recibos digitales por semana ganadera.</p>
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsBitacoraOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl transition-colors shadow-sm text-sm"
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setIsBitacoraOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 font-semibold rounded-xl transition-colors shadow-sm text-sm">
             <History size={15} /> Bitácora
           </button>
           <button
-            onClick={() => { setEditFactura(null); setIsFormOpen(true) }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm"
+            onClick={() => { buildGenPreview(); setIsGenModalOpen(true) }}
+            disabled={!filtroSemana || isAllFabricas}
+            className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-bold rounded-xl transition-colors shadow-sm text-sm"
+            title={isAllFabricas ? 'Selecciona una fábrica para generar facturas' : ''}
           >
-            <Plus size={16} /> Nuevo Recibo Digital
+            <Zap size={16} /> Generar Facturas
+          </button>
+          <button onClick={() => { setEditFactura(null); setIsFormOpen(true) }}
+            className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition-colors shadow-sm">
+            <Plus size={16} /> Nuevo Recibo
           </button>
         </div>
       </div>
 
-      {/* ── KPIs ───────────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* ── KPI cards por semana ────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {[
-          { label: 'Total recibos', value: kpis.total.toString(), color: 'from-blue-500 to-indigo-600' },
-          { label: 'Semanas', value: kpis.semanas.toString(), color: 'from-cyan-500 to-blue-500' },
-          { label: 'Total Bs', value: fmtBs(kpis.totalBs), color: 'from-emerald-500 to-teal-600' },
-          { label: 'Total USD', value: fmtUSD(kpis.totalUSD), color: 'from-amber-500 to-orange-500' },
-        ].map(k => (
-          <div key={k.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 relative overflow-hidden">
-            <div className={`absolute top-0 right-0 w-24 h-24 bg-gradient-to-br ${k.color} opacity-[0.07] rounded-bl-full -mr-6 -mt-6`} />
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{k.label}</p>
-            <p className="text-xl font-black text-slate-800 mt-1 leading-tight">{k.value}</p>
-          </div>
-        ))}
+          { label: 'Litros Pagados', value: kpis.totalLitrosPagados.toLocaleString('es-VE', { maximumFractionDigits: 0 }) + ' L', icon: Milk, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Total USD', value: fmtUSD(kpis.totalUSD), icon: DollarSign, color: 'text-green-700', bg: 'bg-green-50' },
+          { label: 'Total Bs', value: fmtBs(kpis.totalBs), icon: DollarSign, color: 'text-emerald-700', bg: 'bg-emerald-50' },
+          { label: 'Litros Faltantes', value: kpis.litrosFaltantes.toLocaleString('es-VE', { maximumFractionDigits: 0 }) + ' L', icon: TrendingDown, color: 'text-red-600', bg: 'bg-red-50' },
+          { label: 'Litros Agua', value: kpis.litrosAgua.toLocaleString('es-VE', { maximumFractionDigits: 0 }) + ' L', icon: Droplets, color: 'text-orange-600', bg: 'bg-orange-50' },
+          { label: 'Tasa BCV Semana', value: tasaSemanaActual > 0 ? `Bs ${tasaSemanaActual.toLocaleString('es-VE', { minimumFractionDigits: 2 })}` : '—', icon: TrendingDown, color: 'text-indigo-700', bg: 'bg-indigo-50' },
+        ].map(k => {
+          const Icon = k.icon
+          return (
+            <div key={k.label} className={`${k.bg} rounded-2xl border border-white/60 shadow-sm p-3`}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <Icon size={12} className={k.color} />
+                <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider leading-tight">{k.label}</p>
+              </div>
+              <p className={`text-sm font-black ${k.color} leading-tight`}>{k.value}</p>
+            </div>
+          )
+        })}
       </div>
 
-      {/* ── Filtros ─────────────────────────────────────────────────────────── */}
+      {/* ── Filtros + Tabs ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-3 items-center">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => setSearchTerm(e.target.value)}
-            placeholder="Buscar proveedor, código, semana..."
-            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-          />
-        </div>
-
-        <select
-          value={filtroSemana}
-          onChange={e => setFiltroSemana(e.target.value)}
-          className="px-3 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-        >
+        {/* Semana */}
+        <select value={filtroSemana} onChange={e => setFiltroSemana(e.target.value)}
+          className="px-3 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none font-semibold">
           <option value="">Todas las semanas</option>
           {semanasDisponibles.map(([fecha, nombre]) => (
             <option key={fecha} value={fecha}>{nombre}</option>
           ))}
         </select>
+        {/* Búsqueda */}
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input type="text" value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
+            placeholder="Buscar proveedor, código..."
+            className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none" />
+        </div>
+      </div>
 
-        <select
-          value={filtroTipo}
-          onChange={e => setFiltroTipo(e.target.value)}
-          className="px-3 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
-        >
-          <option value="">Todos los tipos</option>
-          <option value="ganadero">Ganadero</option>
-          <option value="transportista">Transportista</option>
-          <option value="ganadero_transportista">Ganadero + Flete</option>
-        </select>
+      {/* Tabs tipo */}
+      <div className="flex gap-1 bg-slate-100 p-1 rounded-xl w-fit">
+        {([
+          { id: 'todos', label: 'Todos', icon: FileText },
+          { id: 'ganadero', label: 'Ganaderos', icon: Users },
+          { id: 'transportista', label: 'Transportes', icon: Truck },
+        ] as const).map(t => {
+          const Icon = t.icon
+          return (
+            <button key={t.id} onClick={() => setTabTipo(t.id)}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${tabTipo === t.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+              <Icon size={13} /> {t.label}
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Barra de acciones masivas ───────────────────────────────────────── */}
@@ -612,6 +934,139 @@ export default function FacturacionPage() {
             <div className="grid grid-cols-2 gap-3">
               <button onClick={() => setIsDeleteBulkOpen(false)} className="bg-slate-100 text-slate-600 font-bold py-3 rounded-xl">Cerrar</button>
               <button onClick={confirmDeleteBulk} className="bg-red-600 text-white font-bold py-3 rounded-xl">Eliminar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Modal: Auto-Generación de Facturas ──────────────────────────── */}
+      {isGenModalOpen && (
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-900/70 backdrop-blur-sm p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-auto overflow-hidden animate-in zoom-in-95">
+            <div className="flex justify-between items-center bg-amber-50 border-b border-amber-200 px-6 py-4">
+              <div>
+                <h3 className="font-black text-slate-800 flex items-center gap-2"><Zap size={16} className="text-amber-500" /> Generar Facturas Automáticamente</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Semana: {filtroSemana ? formatSemanaGanadera(filtroSemana) : '—'}</p>
+              </div>
+              {!genRunning && !genDone && (
+                <button onClick={() => setIsGenModalOpen(false)} className="text-slate-400 hover:text-red-500"><X size={20} /></button>
+              )}
+            </div>
+
+            <div className="p-4 sm:p-6 max-h-[60vh] overflow-y-auto">
+              {genLoading ? (
+                <div className="flex flex-col items-center gap-3 py-12">
+                  <Loader2 className="animate-spin text-amber-500" size={32} />
+                  <p className="text-slate-500 font-semibold text-sm">Analizando recepciones...</p>
+                </div>
+              ) : genDone ? (
+                <div className="flex flex-col items-center gap-3 py-10">
+                  <CheckCircle2 size={48} className="text-green-500" />
+                  <p className="text-lg font-black text-slate-800">¡Generación completada!</p>
+                  <p className="text-sm text-slate-500">{genProgress.done} procesadas · {genProgress.errors} errores</p>
+                </div>
+              ) : genRunning ? (
+                <div className="flex flex-col items-center gap-4 py-10">
+                  <Loader2 className="animate-spin text-amber-500" size={36} />
+                  <p className="font-bold text-slate-700">Generando facturas...</p>
+                  <div className="w-full max-w-sm">
+                    <div className="flex justify-between text-xs text-slate-500 mb-1">
+                      <span>{genProgress.done} de {genProgress.total}</span>
+                      <span>{genProgress.errors > 0 ? `${genProgress.errors} errores` : ''}</span>
+                    </div>
+                    <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${genProgress.total > 0 ? (genProgress.done / genProgress.total) * 100 : 0}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ) : genPreview.length === 0 ? (
+                <div className="text-center py-12 text-slate-400">
+                  <AlertCircle size={36} className="mx-auto mb-3 opacity-40" />
+                  <p className="font-semibold">No hay recepciones para esta semana</p>
+                  <p className="text-sm mt-1">Registra recepciones en el módulo de Recepción primero.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Leyenda */}
+                  <div className="flex flex-wrap gap-3 mb-4 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-green-400" />
+                      <span className="text-slate-600 font-semibold">Nueva ({genPreview.filter(i => !i.existingFacturaId).length})</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-400" />
+                      <span className="text-slate-600 font-semibold">Reemplazar ({genPreview.filter(i => !!i.existingFacturaId).length})</span>
+                    </div>
+                  </div>
+                  {/* Botones de selección rápida */}
+                  <div className="flex gap-2 mb-4 flex-wrap">
+                    <button onClick={() => setGenSelected(new Set(genPreview.map(i => i.key)))}
+                      className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg font-semibold text-slate-600">Seleccionar todo</button>
+                    <button onClick={() => setGenSelected(new Set(genPreview.filter(i => !i.existingFacturaId).map(i => i.key)))}
+                      className="text-xs px-3 py-1.5 bg-green-50 hover:bg-green-100 rounded-lg font-semibold text-green-700 border border-green-200">Solo nuevas</button>
+                    <button onClick={() => setGenSelected(new Set())}
+                      className="text-xs px-3 py-1.5 bg-slate-50 hover:bg-slate-100 rounded-lg font-semibold text-slate-500 border border-slate-200">Deseleccionar todo</button>
+                  </div>
+                  {/* Lista */}
+                  <div className="space-y-2">
+                    {genPreview.map(item => (
+                      <label key={item.key} className={`flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition-colors ${genSelected.has(item.key) ? 'border-blue-300 bg-blue-50/50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}>
+                        <input type="checkbox" checked={genSelected.has(item.key)}
+                          onChange={() => {
+                            const next = new Set(genSelected)
+                            if (next.has(item.key)) next.delete(item.key); else next.add(item.key)
+                            setGenSelected(next)
+                          }}
+                          className="mt-0.5 w-4 h-4 rounded text-blue-600" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[9px] font-black px-2 py-0.5 rounded-full ${item.tipo === 'ganadero' ? 'bg-blue-100 text-blue-700' : item.tipo === 'transportista' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}`}>
+                              {TIPO_LABELS[item.tipo]}
+                            </span>
+                            {item.existingFacturaId
+                              ? <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">REEMPLAZAR</span>
+                              : <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-green-100 text-green-700">NUEVA</span>
+                            }
+                            <span className="text-xs font-black text-slate-700">{item.codigo}</span>
+                            <span className="text-xs text-slate-600 truncate">{item.nombre}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-3 mt-1 text-[10px] text-slate-500">
+                            <span><span className="font-bold">Litros:</span> {item.litros.toLocaleString('es-VE', { maximumFractionDigits: 0 })} L</span>
+                            {item.precio_leche_usd > 0 && <span><span className="font-bold">Leche:</span> $ {item.precio_leche_usd.toFixed(4)}/L</span>}
+                            {item.precio_flete_usd > 0 && <span><span className="font-bold">Flete:</span> $ {item.precio_flete_usd.toFixed(4)}/L</span>}
+                            {(item.litros_faltantes || 0) > 0 && <span className="text-red-500"><span className="font-bold">Faltantes:</span> {item.litros_faltantes?.toLocaleString('es-VE')} L</span>}
+                            {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex justify-between items-center gap-3">
+              <span className="text-xs text-slate-500 font-semibold">
+                {genSelected.size} de {genPreview.length} seleccionadas
+              </span>
+              <div className="flex gap-3">
+                {genDone ? (
+                  <button onClick={() => { setIsGenModalOpen(false); setGenDone(false); setGenPreview([]) }}
+                    className="bg-blue-600 text-white font-black px-5 py-2.5 rounded-xl shadow-sm">Cerrar</button>
+                ) : (
+                  <>
+                    {!genRunning && (
+                      <button onClick={() => setIsGenModalOpen(false)} className="bg-slate-100 text-slate-600 font-bold px-5 py-2.5 rounded-xl">Cancelar</button>
+                    )}
+                    <button onClick={runAutoGen}
+                      disabled={genRunning || genLoading || genSelected.size === 0}
+                      className="flex items-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white font-black px-5 py-2.5 rounded-xl shadow-sm transition-colors">
+                      {genRunning ? <Loader2 size={15} className="animate-spin" /> : <Zap size={15} />}
+                      {genRunning ? 'Generando...' : `Generar ${genSelected.size} facturas`}
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

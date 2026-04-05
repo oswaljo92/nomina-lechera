@@ -2026,6 +2026,339 @@ function ModalVitacora({ modulo, isOpen, onClose }: { modulo: string, isOpen: bo
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PRECIO DEDUCCIONES TAB
+// ─────────────────────────────────────────────────────────────────────────────
+function PrecioDeduccionesTab({ user }: { user: any }) {
+  const supabase = createClient()
+  const { showAlert, Dialog } = useDialog()
+
+  const [semanas, setSemanas] = useState<any[]>([])
+  const [selectedSemana, setSelectedSemana] = useState('')
+  const [semanaDropdownOpen, setSemanaDropdownOpen] = useState(false)
+  const [tasaBase, setTasaBase] = useState(0)
+
+  const [fabricas, setFabricas] = useState<any[]>([])
+  const [selectedFabricaId, setSelectedFabricaId] = useState('')
+
+  const [rutas, setRutas] = useState<any[]>([])
+  const [ganaderosMap, setGanaderosMap] = useState<Record<string, any[]>>({}) // ruta_id → ganaderos[]
+  const [preciosSemanales, setPreciosSemanales] = useState<any[]>([]) // precios_semanales del semana
+
+  // Filas de trabajo: una por ruta
+  const [rows, setRows] = useState<any[]>([])
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    async function init() {
+      // Semanas (miércoles)
+      const { data: tasas } = await supabase.from('tasas_bcv')
+        .select('fecha, tasa').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles'])
+        .order('fecha', { ascending: false })
+      if (tasas) {
+        setSemanas(tasas)
+        const now = new Date()
+        const diff = (now.getDay() < 3 ? 7 : 0) + now.getDay() - 3
+        const wed = new Date(now); wed.setDate(now.getDate() - diff)
+        const wedStr = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
+        const exist = tasas.find((t: any) => t.fecha === wedStr)
+        const sel = exist || tasas[0]
+        if (sel) { setSelectedSemana(sel.fecha); setTasaBase(sel.tasa) }
+      }
+      // Fábricas
+      const { data: fabs } = await supabase.from('fabricas').select('id, codigo, nombre').order('nombre')
+      if (fabs && fabs.length > 0) { setFabricas(fabs); setSelectedFabricaId(fabs[0].id) }
+    }
+    init()
+  }, [])
+
+  useEffect(() => {
+    if (!selectedSemana || !selectedFabricaId) return
+    loadRutasData()
+  }, [selectedSemana, selectedFabricaId])
+
+  async function loadRutasData() {
+    const tObj = semanas.find((s: any) => s.fecha === selectedSemana)
+    if (tObj) setTasaBase(tObj.tasa)
+
+    const [{ data: rutasData }, { data: ganaderosData }, { data: preciosData }, { data: deducData }] = await Promise.all([
+      supabase.from('rutas').select('id, codigo_ruta, nombre_ruta, grupo').eq('fabrica_id', selectedFabricaId).eq('activo', true).order('codigo_ruta'),
+      supabase.from('ganaderos').select('id, codigo_ganadero, nombre, grupo, ruta_id').eq('fabrica_id', selectedFabricaId).eq('activo', true),
+      supabase.from('precios_semanales').select('*').eq('fecha_semana', selectedSemana),
+      supabase.from('precios_deducciones').select('*').eq('fecha_semana', selectedSemana).eq('fabrica_id', selectedFabricaId),
+    ])
+
+    const gMap: Record<string, any[]> = {}
+    for (const g of (ganaderosData || [])) {
+      if (!g.ruta_id) continue
+      if (!gMap[g.ruta_id]) gMap[g.ruta_id] = []
+      gMap[g.ruta_id].push(g)
+    }
+    setGanaderosMap(gMap)
+    setPreciosSemanales(preciosData || [])
+    setRutas(rutasData || [])
+
+    // Build rows
+    const newRows = (rutasData || []).map((ruta: any) => {
+      const existing = (deducData || []).find((d: any) => d.ruta_id === ruta.id)
+      const ganaderoRef = existing?.ganadero_referencia_id || null
+      const factor = existing?.factor_penalizacion || 0
+      const precioLeche = getPrecioLeche(ganaderosData || [], preciosData || [], ganaderoRef)
+      const precioUSD = precioLeche + Number(factor)
+      return {
+        ruta_id: ruta.id,
+        ruta,
+        existingId: existing?.id || null,
+        ganadero_referencia_id: ganaderoRef,
+        precio_leche_ref: precioLeche,
+        factor_penalizacion: Number(factor),
+        precio_deduccion_usd: precioUSD,
+      }
+    })
+    setRows(newRows)
+  }
+
+  function getPrecioLeche(ganaderos: any[], precios: any[], ganaderoId: string | null): number {
+    if (!ganaderoId) return 0
+    const g = ganaderos.find((x: any) => x.id === ganaderoId)
+    if (!g) return 0
+    const precio = precios.find((p: any) => {
+      const codes = (p.ganaderos || []) as string[]
+      return codes.includes(g.codigo_ganadero)
+    })
+    return precio?.precio_leche_usd || 0
+  }
+
+  function updateRow(rutaId: string, field: string, value: any) {
+    setRows(prev => prev.map(row => {
+      if (row.ruta_id !== rutaId) return row
+      const updated = { ...row, [field]: value }
+      if (field === 'ganadero_referencia_id') {
+        const gs = ganaderosMap[rutaId] || []
+        const pLeche = getPrecioLeche(gs, preciosSemanales, value)
+        updated.precio_leche_ref = pLeche
+        updated.precio_deduccion_usd = pLeche + Number(updated.factor_penalizacion)
+      }
+      if (field === 'factor_penalizacion') {
+        updated.precio_deduccion_usd = Number(updated.precio_leche_ref) + Number(value)
+      }
+      return updated
+    }))
+  }
+
+  async function handleSaveAll() {
+    setSaving(true)
+    setSaved(false)
+    let hasError = false
+    for (const row of rows) {
+      const payload = {
+        fabrica_id: selectedFabricaId,
+        fecha_semana: selectedSemana,
+        ruta_id: row.ruta_id,
+        ganadero_referencia_id: row.ganadero_referencia_id || null,
+        factor_penalizacion: Number(row.factor_penalizacion) || 0,
+        precio_deduccion_usd: Number(row.precio_deduccion_usd) || 0,
+        updated_at: new Date().toISOString(),
+      }
+      if (row.existingId) {
+        const { error } = await supabase.from('precios_deducciones').update(payload).eq('id', row.existingId)
+        if (error) hasError = true
+      } else {
+        const { error } = await supabase.from('precios_deducciones').insert(payload)
+        if (error) hasError = true
+      }
+    }
+    setSaving(false)
+    if (hasError) { showAlert('Hubo errores al guardar algunos registros.'); return }
+    setSaved(true)
+    logAction(supabase, user, 'Configuración', 'PRECIOS_DEDUCCIONES', `Guardados precios de deducciones semana ${selectedSemana}`)
+    setTimeout(() => setSaved(false), 3000)
+    loadRutasData()
+  }
+
+  const fmtUSD = (v: number) => v.toLocaleString('en-US', { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+  const fmtBs = (v: number) => v.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+  return (
+    <div className="space-y-6">
+      {Dialog}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="font-black text-slate-800 text-base flex items-center gap-2"><Truck size={16} className="text-orange-500" /> Precio de Deducciones</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Precio base por litro para códigos 90 (faltante) y 92 (agua) — por ruta y semana.</p>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center">
+            {/* Fábrica */}
+            <select value={selectedFabricaId} onChange={e => setSelectedFabricaId(e.target.value)}
+              className="border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold bg-white focus:ring-2 focus:ring-orange-400">
+              {fabricas.map(f => <option key={f.id} value={f.id}>{f.codigo} — {f.nombre}</option>)}
+            </select>
+            {/* Semana */}
+            <div className="relative">
+              <button onClick={() => setSemanaDropdownOpen(o => !o)}
+                className="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold bg-white hover:bg-slate-50 min-w-[180px] justify-between">
+                <Calendar size={14} className="text-slate-400 shrink-0" />
+                <span className="flex-1 text-left">{selectedSemana ? formatDate(selectedSemana) : 'Seleccionar semana'}</span>
+                <span className="text-slate-400">▾</span>
+              </button>
+              {semanaDropdownOpen && (
+                <>
+                  <div className="absolute z-50 top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto w-52">
+                    {semanas.map((s: any) => (
+                      <button key={s.fecha} onClick={() => { setSelectedSemana(s.fecha); setTasaBase(s.tasa); setSemanaDropdownOpen(false) }}
+                        className={`w-full text-left px-4 py-2 text-xs font-bold hover:bg-orange-50 ${selectedSemana === s.fecha ? 'bg-orange-100 text-orange-700' : 'text-slate-700'}`}>
+                        {formatDate(s.fecha)}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="fixed inset-0 z-40" onClick={() => setSemanaDropdownOpen(false)} />
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Tasa BCV info */}
+        {tasaBase > 0 && (
+          <div className="px-4 py-2 bg-blue-50 border-b border-blue-100 flex items-center gap-2">
+            <span className="text-[10px] font-black text-blue-600 uppercase">Tasa BCV inicio de semana:</span>
+            <span className="text-sm font-black text-blue-800">Bs {tasaBase.toLocaleString('es-VE', { minimumFractionDigits: 2 })}</span>
+            <span className="text-[10px] text-blue-400 ml-1">({formatDate(selectedSemana)})</span>
+          </div>
+        )}
+
+        {rows.length === 0 ? (
+          <div className="p-12 text-center text-slate-400 font-bold text-sm">
+            {selectedSemana ? 'No hay rutas activas para esta fábrica.' : 'Selecciona una semana para comenzar.'}
+          </div>
+        ) : (
+          <>
+            {/* Desktop table */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-200 text-xs">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ruta</th>
+                    <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ganadero Referencia</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500">Precio Leche Ref. (USD/L)</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500">Factor Penalización (USD/L)</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500 bg-orange-50">Precio Descuento (USD/L)</th>
+                    <th className="px-4 py-3 text-center text-[10px] font-black uppercase text-slate-500 bg-orange-50">Precio Descuento (Bs/L)</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-slate-100">
+                  {rows.map(row => {
+                    const ganaderosRuta = ganaderosMap[row.ruta_id] || []
+                    const precioBs = Number(row.precio_deduccion_usd) * tasaBase
+                    return (
+                      <tr key={row.ruta_id} className="hover:bg-slate-50">
+                        <td className="px-4 py-3">
+                          <span className="font-black text-blue-600 text-[11px]">{row.ruta.codigo_ruta}</span>
+                          <p className="text-slate-600 font-semibold">{row.ruta.nombre_ruta}</p>
+                        </td>
+                        <td className="px-4 py-3 min-w-[200px]">
+                          <select value={row.ganadero_referencia_id || ''}
+                            onChange={e => updateRow(row.ruta_id, 'ganadero_referencia_id', e.target.value || null)}
+                            className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold bg-white focus:ring-2 focus:ring-orange-400 focus:border-orange-400">
+                            <option value="">(Sin referencia)</option>
+                            {ganaderosRuta.map((g: any) => (
+                              <option key={g.id} value={g.id}>{g.codigo_ganadero} — {g.nombre}</option>
+                            ))}
+                          </select>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`font-black ${row.precio_leche_ref > 0 ? 'text-green-700' : 'text-slate-300'}`}>
+                            {row.precio_leche_ref > 0 ? `$ ${fmtUSD(row.precio_leche_ref)}` : '—'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <input type="number" min="0" step="0.0001"
+                            value={row.factor_penalizacion || ''}
+                            placeholder="0.0000"
+                            onChange={e => updateRow(row.ruta_id, 'factor_penalizacion', Number(e.target.value) || 0)}
+                            className="w-28 border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-center focus:ring-2 focus:ring-orange-400 focus:border-orange-400" />
+                        </td>
+                        <td className="px-4 py-3 text-center bg-orange-50">
+                          <span className="font-black text-orange-700 text-sm">$ {fmtUSD(Number(row.precio_deduccion_usd) || 0)}</span>
+                        </td>
+                        <td className="px-4 py-3 text-center bg-orange-50">
+                          <span className="font-black text-orange-800 text-sm">Bs {fmtBs(precioBs)}</span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden divide-y divide-slate-100">
+              {rows.map(row => {
+                const ganaderosRuta = ganaderosMap[row.ruta_id] || []
+                const precioBs = Number(row.precio_deduccion_usd) * tasaBase
+                return (
+                  <div key={row.ruta_id} className="p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="bg-blue-100 text-blue-800 font-black text-[10px] px-2 py-0.5 rounded">{row.ruta.codigo_ruta}</span>
+                      <span className="font-bold text-slate-800 text-sm">{row.ruta.nombre_ruta}</span>
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase">Ganadero referencia</label>
+                      <select value={row.ganadero_referencia_id || ''}
+                        onChange={e => updateRow(row.ruta_id, 'ganadero_referencia_id', e.target.value || null)}
+                        className="w-full border border-slate-200 rounded-lg px-2 py-2 text-xs font-bold mt-1">
+                        <option value="">(Sin referencia)</option>
+                        {ganaderosRuta.map((g: any) => (
+                          <option key={g.id} value={g.id}>{g.codigo_ganadero} — {g.nombre}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-slate-50 rounded-lg p-2 text-center">
+                        <p className="text-[9px] font-black text-slate-400 uppercase">Precio Leche Ref.</p>
+                        <p className="font-black text-green-700 text-sm">$ {fmtUSD(row.precio_leche_ref || 0)}</p>
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase">Factor Penalización</label>
+                        <input type="number" min="0" step="0.0001"
+                          value={row.factor_penalizacion || ''}
+                          placeholder="0.0000"
+                          onChange={e => updateRow(row.ruta_id, 'factor_penalizacion', Number(e.target.value) || 0)}
+                          className="w-full border border-slate-300 rounded-lg px-2 py-1.5 text-xs font-bold text-center mt-1" />
+                      </div>
+                    </div>
+                    <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 grid grid-cols-2 gap-3 text-center">
+                      <div>
+                        <p className="text-[9px] font-black text-orange-500 uppercase">Precio Desc. USD/L</p>
+                        <p className="font-black text-orange-700">$ {fmtUSD(Number(row.precio_deduccion_usd) || 0)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-black text-orange-500 uppercase">Precio Desc. Bs/L</p>
+                        <p className="font-black text-orange-800">Bs {fmtBs(precioBs)}</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-3">
+              {saved && <span className="text-emerald-600 font-bold text-sm flex items-center gap-1"><CheckCircle2 size={16} /> Guardado</span>}
+              <button onClick={handleSaveAll} disabled={saving || !selectedSemana}
+                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white font-black px-5 py-2.5 rounded-xl shadow-sm disabled:opacity-50 transition-colors">
+                {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                {saving ? 'Guardando...' : 'Guardar Todo'}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FÁBRICAS TAB
 // ─────────────────────────────────────────────────────────────────────────────
 function FabricasTab({ user }: { user: any }) {
@@ -2949,6 +3282,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
+    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck },
     { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2 },
     { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt },
     { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, adminOnly: true },
@@ -2986,6 +3320,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
          {tab === 'tasas' && <TasasTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Tasas BCV' })} />}
          {tab === 'crioscopia' && <CrioscopiaTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Crioscopía' })} />}
          {tab === 'precios' && <PreciosTab user={currentUser} onOpenBitacora={() => setBitacoraModal({ open: true, modulo: 'Precios' })} />}
+         {tab === 'precios-deducciones' && <PrecioDeduccionesTab user={currentUser} />}
          {tab === 'fabricas' && <FabricasTab user={currentUser} />}
          {tab === 'facturacion' && <FacturacionConfigTab user={currentUser} />}
          {tab === 'vitacora' && <VitacoraTab user={currentUser} />}

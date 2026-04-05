@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -v \"//\")",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -X POST https://api.supabase.com/v1/projects/gpyyjehwcknnzaxgxmif/database/query -H 'Authorization: Bearer sbp_c4e77a46ec094964fac0ab78b4e3a9f99d22bbad' -H 'Content-Type: application/json' -d '{\"query\": \"ALTER TABLE facturas_deducciones ADD COLUMN IF NOT EXISTS litros NUMERIC DEFAULT 0; ALTER TABLE facturas_deducciones ADD COLUMN IF NOT EXISTS precio_usd NUMERIC DEFAULT 0;\"}')"
+    ]
+  }
+}

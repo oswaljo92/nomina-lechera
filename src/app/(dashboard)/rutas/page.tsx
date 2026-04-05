@@ -13,7 +13,11 @@ export default function RutasPage() {
   const { selectedFabricaId, selectedFabrica, isAllFabricas } = useFabrica()
   const [rutas, setRutas] = useState<any[]>([])
   const [ganaderosMap, setGanaderosMap] = useState<Record<string, any[]>>({})
+  const [allGanaderos, setAllGanaderos] = useState<any[]>([])
   const [fabricasDisponibles, setFabricasDisponibles] = useState<any[]>([])
+  // Selector ganadero propietario en modal
+  const [ganaderoSearch, setGanaderoSearch] = useState('')
+  const [ganaderoDropdownOpen, setGanaderoDropdownOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
@@ -65,7 +69,7 @@ export default function RutasPage() {
 
     const rutaQ = supabase.from('rutas').select('*, fabricas(nombre,codigo)').order('created_at', { ascending: false })
     if (selectedFabricaId && selectedFabricaId !== 'all') rutaQ.eq('fabrica_id', selectedFabricaId)
-    const ganaderosQ = supabase.from('ganaderos').select('codigo_ganadero, nombre, grupo, ruta_id').eq('activo', true)
+    const ganaderosQ = supabase.from('ganaderos').select('id, codigo_ganadero, nombre, grupo, ruta_id, fabrica_id').eq('activo', true)
     const fabQ = supabase.from('fabricas').select('id, nombre, codigo').order('nombre')
     const [{ data: rutasData }, { data: ganaderosData }, { data: fabData }] = await Promise.all([rutaQ, ganaderosQ, fabQ])
     if (rutasData) setRutas(rutasData)
@@ -78,6 +82,7 @@ export default function RutasPage() {
         map[g.ruta_id].push(g)
       }
       setGanaderosMap(map)
+      setAllGanaderos(ganaderosData)
     }
     setLoading(false)
   }
@@ -142,6 +147,7 @@ export default function RutasPage() {
       rif: editRuta.rif || null,
       grupo: editRuta.grupo || null,
       activo: editRuta.activo !== false,
+      ganadero_id: editRuta.ganadero_id || null,
       ...(editRuta.fabrica_id ? { fabrica_id: editRuta.fabrica_id } : {})
     }
 
@@ -331,7 +337,7 @@ export default function RutasPage() {
                 <Trash2 size={16} /> Borrar ({selectedIds.size})
               </button>
             )}
-            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '', fabrica_id: selectedFabricaId !== 'all' ? selectedFabricaId : '' }); setOriginalGrupo(null); setErrorDuplicado(''); setIsModalOpen(true) }}
+            <button onClick={() => { setEditRuta({ codigo_ruta: '', nombre_ruta: '', sap: '', cedula: '', rif: '', grupo: '', fabrica_id: selectedFabricaId !== 'all' ? selectedFabricaId : '', ganadero_id: null }); setOriginalGrupo(null); setErrorDuplicado(''); setGanaderoSearch(''); setGanaderoDropdownOpen(false); setIsModalOpen(true) }}
               className="bg-blue-600 text-white font-bold px-5 py-2 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-blue-500/20 active:scale-95 transition-all">
               <Plus size={18} /> Nueva Ruta
             </button>
@@ -361,7 +367,7 @@ export default function RutasPage() {
                   </span>
                 </div>
                 <div className="flex justify-end mt-3 gap-2">
-                  <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
+                  <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setGanaderoSearch(''); setGanaderoDropdownOpen(false); setIsModalOpen(true) }} className="text-blue-500 bg-blue-50 p-2 rounded-lg"><Edit2 size={15} /></button>
                   {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 bg-red-50 p-2 rounded-lg"><Trash2 size={15} /></button>}
                 </div>
               </div>
@@ -380,6 +386,7 @@ export default function RutasPage() {
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Fábrica</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Nombre Ruta</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Grupo</th>
+                <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Propietario</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Ganaderos</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">Cédula / RIF</th>
                 <th className="px-4 py-3 text-left text-[10px] font-black uppercase text-slate-500">SAP</th>
@@ -392,7 +399,7 @@ export default function RutasPage() {
                   {isAdmin && <td className="px-4 py-3 text-center"><input type="checkbox" checked={selectedIds.has(ruta.id)} onChange={() => toggleSelection(ruta.id)} /></td>}
                   <td className="px-4 py-3 align-middle">
                     <div className="flex gap-3 items-center justify-center">
-                      <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
+                      <button onClick={() => { setEditRuta(ruta); setOriginalGrupo(ruta.grupo ?? null); setErrorDuplicado(''); setGanaderoSearch(''); setGanaderoDropdownOpen(false); setIsModalOpen(true) }} className="text-blue-500 hover:bg-blue-50 p-1.5 rounded"><Edit2 size={16} /></button>
                       {isAdmin && <button onClick={() => handleDeleteSingle(ruta.id, ruta.nombre_ruta)} className="text-red-500 hover:bg-red-50 p-1.5 rounded"><Trash2 size={16} /></button>}
                     </div>
                   </td>
@@ -408,6 +415,14 @@ export default function RutasPage() {
                       ? <span className="bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{ruta.grupo}</span>
                       : (() => { const g = ganaderosMap[ruta.id]?.[0]; return g?.grupo ? <span className="bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{g.grupo}</span> : <span className="text-slate-300">—</span> })()
                     }
+                  </td>
+                  <td className="px-4 py-3 whitespace-nowrap text-xs">
+                    {(() => {
+                      const gProp = allGanaderos.find(g => g.id === ruta.ganadero_id)
+                      return gProp
+                        ? <span className="bg-amber-100 text-amber-800 font-black px-2 py-0.5 rounded-full text-[10px]">{gProp.codigo_ganadero} {gProp.nombre}</span>
+                        : <span className="text-slate-300">—</span>
+                    })()}
                   </td>
                   <td className="px-4 py-3 max-w-[250px]">
                     <div className="flex flex-wrap gap-1">
@@ -573,6 +588,70 @@ export default function RutasPage() {
                     <input type="checkbox" checked={editRuta.activo !== false} onChange={e => setEditRuta({ ...editRuta, activo: e.target.checked })} className="w-4 h-4 rounded text-blue-600" />
                     <span className="text-xs font-bold text-slate-700">Ruta Activa</span>
                   </label>
+                </div>
+              </div>
+
+              {/* Ganadero Propietario */}
+              <div className="border-t pt-4">
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-3">Ganadero Propietario (Transportista)</p>
+                <div className="relative">
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ganadero propietario <span className="text-slate-300 font-normal normal-case">(opcional — si el ganadero es su propio transportista)</span></label>
+                  {(() => {
+                    const selectedG = allGanaderos.find(g => g.id === editRuta.ganadero_id)
+                    const filteredGs = allGanaderos.filter(g => {
+                      if (editRuta.fabrica_id && g.fabrica_id !== editRuta.fabrica_id) return false
+                      const term = ganaderoSearch.toLowerCase()
+                      return !term || g.codigo_ganadero?.toLowerCase().includes(term) || g.nombre?.toLowerCase().includes(term)
+                    }).slice(0, 20)
+                    return (
+                      <div className="relative">
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            placeholder="Buscar ganadero por código o nombre..."
+                            value={selectedG && !ganaderoDropdownOpen ? `${selectedG.codigo_ganadero} — ${selectedG.nombre}` : ganaderoSearch}
+                            onFocus={() => { setGanaderoDropdownOpen(true); setGanaderoSearch('') }}
+                            onChange={e => { setGanaderoSearch(e.target.value); setGanaderoDropdownOpen(true) }}
+                            className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-amber-400 focus:border-amber-400"
+                          />
+                          {editRuta.ganadero_id && (
+                            <button type="button" onClick={() => { setEditRuta({ ...editRuta, ganadero_id: null }); setGanaderoSearch(''); setGanaderoDropdownOpen(false) }}
+                              className="px-3 py-2 bg-red-50 text-red-500 rounded-lg border border-red-200 hover:bg-red-100 text-xs font-bold">
+                              Quitar
+                            </button>
+                          )}
+                        </div>
+                        {ganaderoDropdownOpen && (
+                          <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                            {filteredGs.length === 0
+                              ? <div className="p-3 text-xs text-slate-400 text-center font-semibold">Sin resultados</div>
+                              : filteredGs.map(g => (
+                                <button key={g.id} type="button"
+                                  onClick={() => { setEditRuta({ ...editRuta, ganadero_id: g.id }); setGanaderoDropdownOpen(false); setGanaderoSearch('') }}
+                                  className="w-full text-left px-4 py-2.5 hover:bg-amber-50 flex items-center gap-3 border-b border-slate-100 last:border-0">
+                                  <span className="bg-amber-100 text-amber-800 text-[10px] font-black px-2 py-0.5 rounded shrink-0">{g.codigo_ganadero}</span>
+                                  <span className="text-sm font-semibold text-slate-700 truncate">{g.nombre}</span>
+                                </button>
+                              ))
+                            }
+                          </div>
+                        )}
+                        {ganaderoDropdownOpen && (
+                          <div className="fixed inset-0 z-40" onClick={() => setGanaderoDropdownOpen(false)} />
+                        )}
+                      </div>
+                    )
+                  })()}
+                  {editRuta.ganadero_id && (() => {
+                    const g = allGanaderos.find(x => x.id === editRuta.ganadero_id)
+                    return g ? (
+                      <div className="mt-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+                        <span className="text-amber-600 text-xs font-black">Propietario:</span>
+                        <span className="text-amber-800 text-xs font-bold">{g.codigo_ganadero} — {g.nombre}</span>
+                        <span className="ml-auto bg-amber-200 text-amber-800 text-[9px] font-black px-2 py-0.5 rounded-full">GANADERO-TRANSPORTISTA</span>
+                      </div>
+                    ) : null
+                  })()}
                 </div>
               </div>
 
