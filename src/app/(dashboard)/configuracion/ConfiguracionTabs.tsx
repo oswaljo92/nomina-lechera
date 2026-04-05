@@ -2032,7 +2032,8 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
   const supabase = createClient()
   const { showAlert, Dialog } = useDialog()
 
-  const [semanas, setSemanas] = useState<any[]>([])
+  const [semanas, setSemanas] = useState<any[]>([])   // tasas_bcv miércoles
+  const [semanasGanaderas, setSemanasGanaderas] = useState<any[]>([]) // semanas_ganaderas
   const [selectedSemana, setSelectedSemana] = useState('')
   const [semanaDropdownOpen, setSemanaDropdownOpen] = useState(false)
   const [tasaBase, setTasaBase] = useState(0)
@@ -2053,17 +2054,23 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
 
   useEffect(() => {
     async function init() {
-      // Semanas (miércoles)
-      const { data: tasas } = await supabase.from('tasas_bcv')
-        .select('fecha, tasa').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles'])
-        .order('fecha', { ascending: false })
+      // Semanas (miércoles de tasas_bcv) + semanas_ganaderas para número
+      const [{ data: tasas }, { data: semGan }] = await Promise.all([
+        supabase.from('tasas_bcv').select('fecha, tasa').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles']).order('fecha', { ascending: false }),
+        supabase.from('semanas_ganaderas').select('*').order('fecha_inicio', { ascending: false }),
+      ])
+      if (semGan) setSemanasGanaderas(semGan)
       if (tasas) {
         setSemanas(tasas)
+        // Auto-seleccionar la semana vigente primero, luego la actual por fecha
+        const vigente = semGan?.find((s: any) => s.es_vigente)
+        const wedVigente = vigente?.fecha_inicio
         const now = new Date()
         const diff = (now.getDay() < 3 ? 7 : 0) + now.getDay() - 3
         const wed = new Date(now); wed.setDate(now.getDate() - diff)
         const wedStr = `${wed.getFullYear()}-${String(wed.getMonth()+1).padStart(2,'0')}-${String(wed.getDate()).padStart(2,'0')}`
-        const exist = tasas.find((t: any) => t.fecha === wedStr)
+        const selFecha = wedVigente || wedStr
+        const exist = tasas.find((t: any) => t.fecha === selFecha)
         const sel = exist || tasas[0]
         if (sel) { setSelectedSemana(sel.fecha); setTasaBase(sel.tasa) }
       }
@@ -2229,27 +2236,47 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
               )}
             </div>
             {/* Semana */}
-            <div className="relative">
-              <button onClick={() => setSemanaDropdownOpen(o => !o)}
-                className="flex items-center gap-2 border border-slate-300 rounded-xl px-3 py-2 text-sm font-bold bg-white hover:bg-slate-50 min-w-[180px] justify-between">
-                <Calendar size={14} className="text-slate-400 shrink-0" />
-                <span className="flex-1 text-left">{selectedSemana ? formatDate(selectedSemana) : 'Seleccionar semana'}</span>
-                <span className="text-slate-400">▾</span>
-              </button>
-              {semanaDropdownOpen && (
-                <>
-                  <div className="absolute z-50 top-full mt-1 right-0 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto w-52">
-                    {semanas.map((s: any) => (
-                      <button key={s.fecha} onClick={() => { setSelectedSemana(s.fecha); setTasaBase(s.tasa); setSemanaDropdownOpen(false) }}
-                        className={`w-full text-left px-4 py-2 text-xs font-bold hover:bg-orange-50 ${selectedSemana === s.fecha ? 'bg-orange-100 text-orange-700' : 'text-slate-700'}`}>
-                        {formatDate(s.fecha)}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="fixed inset-0 z-40" onClick={() => setSemanaDropdownOpen(false)} />
-                </>
-              )}
-            </div>
+            {(() => {
+              const selSemGan = semanasGanaderas.find((sg: any) => sg.fecha_inicio === selectedSemana)
+              const selLabel = selSemGan
+                ? `Sem. ${selSemGan.numero_semana} — ${formatDate(selectedSemana)}`
+                : selectedSemana ? formatDate(selectedSemana) : 'Seleccionar semana'
+              return (
+                <div className="relative">
+                  <button onClick={() => setSemanaDropdownOpen(o => !o)}
+                    className="flex items-center gap-2 border border-slate-300 hover:border-blue-400 rounded-lg px-3 py-2 text-xs font-bold bg-white min-w-[210px] justify-between focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Calendar size={13} className="text-slate-400 shrink-0" />
+                      <span className="truncate text-gray-900">{selLabel}</span>
+                    </div>
+                    <ChevronDown className={`text-gray-500 shrink-0 transition-transform duration-200 ${semanaDropdownOpen ? 'rotate-180' : ''}`} size={14} />
+                  </button>
+                  {semanaDropdownOpen && (
+                    <>
+                      <div className="absolute z-50 top-full mt-1.5 right-0 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto min-w-[230px]">
+                        {semanas.map((s: any) => {
+                          const sg = semanasGanaderas.find((x: any) => x.fecha_inicio === s.fecha)
+                          const isSelected = selectedSemana === s.fecha
+                          return (
+                            <button key={s.fecha}
+                              onMouseDown={e => { e.preventDefault(); setSelectedSemana(s.fecha); setTasaBase(s.tasa); setSemanaDropdownOpen(false) }}
+                              className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'}`}>
+                              <div className="min-w-0">
+                                {sg && <div className={`text-[10px] font-black uppercase tracking-wide ${isSelected ? 'text-blue-600' : 'text-orange-500'}`}>Semana {sg.numero_semana} · {sg.año}{sg.es_vigente ? ' ★' : ''}</div>}
+                                <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{formatDate(s.fecha)}</div>
+                              </div>
+                              {isSelected && <Check className="h-4 w-4 text-blue-500 shrink-0" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="fixed inset-0 z-40" onClick={() => setSemanaDropdownOpen(false)} />
+                    </>
+                  )}
+                </div>
+              )
+            })()}
+
           </div>
         </div>
 

@@ -5,6 +5,7 @@ import {
   Plus, Search, FileText, Image as ImageIcon, Trash2, Edit2, Eye,
   Loader2, Download, FileArchive, X, CheckCircle2, History, AlertCircle,
   Zap, Users, Truck, Droplets, TrendingDown, DollarSign, Milk,
+  Check, ChevronDown,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useFabrica } from '@/contexts/FabricaContext'
@@ -62,6 +63,7 @@ export default function FacturacionPage() {
   const [loading, setLoading] = useState(true)
   const [curUser, setCurUser] = useState<any>(null)
   const [fabricasConFiscal, setFabricasConFiscal] = useState<any[]>([])
+  const [semanasGanaderas, setSemanasGanaderas] = useState<any[]>([]) // para el selector de semanas
 
   // Filtros
   const [searchTerm, setSearchTerm] = useState('')
@@ -115,9 +117,12 @@ export default function FacturacionPage() {
     const { data: { user } } = await supabase.auth.getUser()
     setCurUser(user)
 
-    const fabQ = supabase.from('fabricas').select('id, codigo, nombre, razon_social, rif, direccion_fiscal')
-    const { data: fabData } = await fabQ
+    const [{ data: fabData }, { data: semGanData }] = await Promise.all([
+      supabase.from('fabricas').select('id, codigo, nombre, razon_social, rif, direccion_fiscal'),
+      supabase.from('semanas_ganaderas').select('*').order('fecha_inicio', { ascending: false }),
+    ])
     setFabricasConFiscal(fabData ?? [])
+    setSemanasGanaderas(semGanData ?? [])
 
     // Tasa BCV de inicio de semana actual
     const wedStr = getCurrentWednesday()
@@ -138,11 +143,11 @@ export default function FacturacionPage() {
     const allFacturas = (data ?? []) as Factura[]
     setFacturas(allFacturas)
 
-    // Auto-seleccionar semana vigente si no hay filtro
-    if (!filtroSemana) {
-      const vigente = allFacturas.find(f => f.semana_fecha === wedStr)
-      if (vigente) setFiltroSemana(wedStr)
-      else if (allFacturas.length > 0) setFiltroSemana(allFacturas[0].semana_fecha)
+    // Auto-seleccionar semana vigente si no hay filtro (usa semanas_ganaderas, no facturas)
+    if (!filtroSemana && semGanData && semGanData.length > 0) {
+      const vigente = semGanData.find((s: any) => s.es_vigente)
+      if (vigente) setFiltroSemana(vigente.fecha_inicio)
+      else setFiltroSemana(semGanData[0].fecha_inicio)
     }
 
     setLoading(false)
@@ -177,12 +182,26 @@ export default function FacturacionPage() {
   const paged = filtered.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
   useEffect(() => setCurrentPage(0), [searchTerm, filtroSemana, filtroTipo])
 
-  // ── Semanas disponibles para filtro ───────────────────────────────────────
+  // ── Semanas disponibles para filtro (base: semanas_ganaderas + facturas históricas) ─
   const semanasDisponibles = useMemo(() => {
-    const set = new Map<string, string>()
-    facturas.forEach(f => set.set(f.semana_fecha, f.semana_nombre))
-    return Array.from(set.entries()).sort((a, b) => b[0].localeCompare(a[0]))
-  }, [facturas])
+    const map = new Map<string, { nombre: string; numSemana: number | null; año: number | null; vigente: boolean }>()
+    // Primero las semanas ganaderas registradas
+    semanasGanaderas.forEach((sg: any) => {
+      map.set(sg.fecha_inicio, {
+        nombre: formatSemanaGanadera(sg.fecha_inicio),
+        numSemana: sg.numero_semana,
+        año: sg.año,
+        vigente: sg.es_vigente,
+      })
+    })
+    // Agregar semanas de facturas históricas que no estén en semanas_ganaderas
+    facturas.forEach(f => {
+      if (!map.has(f.semana_fecha)) {
+        map.set(f.semana_fecha, { nombre: f.semana_nombre, numSemana: null, año: null, vigente: false })
+      }
+    })
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]))
+  }, [facturas, semanasGanaderas])
 
   // ── Selección ──────────────────────────────────────────────────────────────
   const toggleSel = (id: string) => {
@@ -631,14 +650,55 @@ export default function FacturacionPage() {
 
       {/* ── Filtros + Tabs ──────────────────────────────────────────────────── */}
       <div className="flex flex-wrap gap-3 items-center">
-        {/* Semana */}
-        <select value={filtroSemana} onChange={e => setFiltroSemana(e.target.value)}
-          className="px-3 py-2.5 text-sm border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none font-semibold">
-          <option value="">Todas las semanas</option>
-          {semanasDisponibles.map(([fecha, nombre]) => (
-            <option key={fecha} value={fecha}>{nombre}</option>
-          ))}
-        </select>
+        {/* Semana — dropdown con número de semana */}
+        {(() => {
+          const [semDropOpen, setSemDropOpen] = React.useState(false)
+          const selEntry = semanasDisponibles.find(([f]) => f === filtroSemana)
+          const selLabel = selEntry
+            ? (selEntry[1].numSemana ? `Sem. ${selEntry[1].numSemana} — ${selEntry[1].nombre}` : selEntry[1].nombre)
+            : 'Todas las semanas'
+          return (
+            <div className="relative">
+              <button onClick={() => setSemDropOpen(o => !o)}
+                className="flex items-center justify-between gap-2 bg-white border border-slate-300 hover:border-blue-400 text-gray-900 rounded-lg px-3 py-2.5 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 min-w-[230px]">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Check size={13} className="text-blue-500 shrink-0" />
+                  <span className="text-xs font-bold truncate">{selLabel}</span>
+                </div>
+                <ChevronDown className={`text-gray-500 shrink-0 transition-transform duration-200 ${semDropOpen ? 'rotate-180' : ''}`} size={14} />
+              </button>
+              {semDropOpen && (
+                <>
+                  <div className="absolute z-50 top-full mt-1.5 left-0 bg-white border border-slate-200 rounded-lg shadow-2xl max-h-64 overflow-y-auto min-w-[260px]">
+                    <button onMouseDown={e => { e.preventDefault(); setFiltroSemana(''); setSemDropOpen(false) }}
+                      className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 border-b border-gray-100 transition-colors ${!filtroSemana ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-700'}`}>
+                      <span className="text-xs font-bold">Todas las semanas</span>
+                      {!filtroSemana && <Check size={14} className="text-blue-500" />}
+                    </button>
+                    {semanasDisponibles.map(([fecha, info]) => {
+                      const isSelected = filtroSemana === fecha
+                      return (
+                        <button key={fecha} onMouseDown={e => { e.preventDefault(); setFiltroSemana(fecha); setSemDropOpen(false) }}
+                          className={`w-full text-left px-4 py-2.5 flex items-center justify-between gap-2 transition-colors border-b border-gray-100 last:border-0 ${isSelected ? 'bg-blue-50 hover:bg-blue-100' : 'bg-white hover:bg-gray-50'}`}>
+                          <div className="min-w-0">
+                            {info.numSemana && (
+                              <div className={`text-[10px] font-black uppercase tracking-wide ${isSelected ? 'text-blue-600' : 'text-blue-500'}`}>
+                                Semana {info.numSemana} · {info.año}{info.vigente ? ' ★ Vigente' : ''}
+                              </div>
+                            )}
+                            <div className={`text-xs font-bold leading-tight ${isSelected ? 'text-blue-700' : 'text-gray-900'}`}>{info.nombre}</div>
+                          </div>
+                          {isSelected && <Check size={14} className="text-blue-500 shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="fixed inset-0 z-40" onClick={() => setSemDropOpen(false)} />
+                </>
+              )}
+            </div>
+          )
+        })()}
         {/* Búsqueda */}
         <div className="relative flex-1 min-w-[180px]">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
