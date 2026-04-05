@@ -2061,11 +2061,14 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
       // Semanas (miércoles de tasas_bcv) + semanas_ganaderas para número
       const [{ data: tasas }, { data: semGan }] = await Promise.all([
         supabase.from('tasas_bcv').select('fecha, tasa').in('dia', ['miercoles', 'Miércoles', 'miércoles', 'Miercoles']).order('fecha', { ascending: false }),
-        supabase.from('semanas_ganaderas').select('*').order('fecha_inicio', { ascending: false }),
+        supabase.from('semanas_ganaderas').select('*').eq('activa', true).order('fecha_inicio', { ascending: false }),
       ])
       if (semGan) setSemanasGanaderas(semGan)
       if (tasas) {
-        setSemanas(tasas)
+        // Solo mostrar semanas BCV que tengan semana ganadera activa
+        const fechasActivas = new Set((semGan || []).map((sg: any) => sg.fecha_inicio))
+        const tasasActivas = tasas.filter((t: any) => fechasActivas.has(t.fecha))
+        setSemanas(tasasActivas)
         // Auto-seleccionar la semana vigente primero, luego la actual por fecha
         const vigente = semGan?.find((s: any) => s.es_vigente)
         const wedVigente = vigente?.fecha_inicio
@@ -3342,15 +3345,15 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
   }, [])
 
   const tabsItems = [
-    { id: 'semanas', label: 'Semanas Ganaderas', shortLabel: 'Semanas', icon: Calendar },
-    { id: 'usuarios', label: 'Usuarios', shortLabel: 'Usuarios', icon: Users },
-    { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw },
-    { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet },
-    { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator },
-    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck },
-    { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2 },
-    { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt },
-    { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, adminOnly: true },
+    { id: 'semanas', label: 'Semanas Ganaderas', shortLabel: 'Semanas', icon: Calendar, iconSize: 18 },
+    { id: 'usuarios', label: 'Usuarios', shortLabel: 'Usuarios', icon: Users, iconSize: 18 },
+    { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw, iconSize: 18 },
+    { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet, iconSize: 18 },
+    { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator, iconSize: 18 },
+    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck, iconSize: 18 },
+    { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2, iconSize: 18 },
+    { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt, iconSize: 18 },
+    { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, iconSize: 18, adminOnly: true },
   ]
 
   return (
@@ -3371,7 +3374,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
                  tab === item.id ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200/50'
                }`}
              >
-               <Icon size={18} />
+               <Icon size={item.iconSize ?? 18} />
                <span className="sm:hidden">{(item as any).shortLabel}</span>
                <span className="hidden sm:inline">{item.label}</span>
              </button>

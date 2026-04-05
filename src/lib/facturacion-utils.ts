@@ -59,9 +59,9 @@ export function getSemanaNumero(wednesdayIso: string): number {
  * Pipeline contable:
  *   pl_bs           = precio_leche_bs (3 dec) si viene; si no: round(precio_leche_usd × tasa_miercoles, 3)
  *   base_bs         = litros_a_pagar × pl_bs                                  (directo en Bs)
- *   nota_deb_leche  = litros_a_pagar × pl_bs × (tasa_factura − tasa_miercoles) / tasa_miercoles
+ *   nota_deb_leche  = litros_a_pagar × precio_usd × tasa_factura − base_bs     (diferencia a tasa emisión)
  *   flete_bs        = litros_flete × pf_bs                                     (si aplica)
- *   nota_deb_flete  = litros_flete × pf_bs × (tasa_factura − tasa_miercoles) / tasa_miercoles
+ *   nota_deb_flete  = litros_flete × precio_flete_usd × tasa_factura − flete_bs
  *   subtotal_bs     = base_bs − ded_total  (leche cruda menos deducciones)
  *   islr_bs         = subtotal_bs × tasa_islr  (retención referencial, no afecta el total)
  *   total_bs        = subtotal_bs + flete_bs  (flete solo si ganadero_transportista o transportista)
@@ -102,21 +102,18 @@ export function calcularFactura(params: {
     : Math.round(precio_flete_usd * tasa_miercoles * 1000) / 1000
 
   const base_bs = litros_a_pagar * pl_bs
-  // Nota de débito: diferencial de tasa sobre el precio Bs base
-  const nota_debito_leche_bs = tasa_miercoles > 0
-    ? litros_a_pagar * pl_bs * (tasa_factura - tasa_miercoles) / tasa_miercoles
-    : 0
+  // Nota de débito: monto total a tasa de emisión menos lo ya calculado a tasa inicio de semana
+  const nota_debito_leche_bs = litros_a_pagar * precio_leche_usd * tasa_factura - base_bs
 
   let flete_bs = 0
   let nota_debito_flete_bs = 0
   if (incluye_flete && litros_flete > 0 && pf_bs > 0) {
     flete_bs = litros_flete * pf_bs
-    nota_debito_flete_bs = tasa_miercoles > 0
-      ? litros_flete * pf_bs * (tasa_factura - tasa_miercoles) / tasa_miercoles
-      : 0
+    nota_debito_flete_bs = litros_flete * precio_flete_usd * tasa_factura - flete_bs
   }
 
-  const nota_debito_total_bs = nota_debito_leche_bs + nota_debito_flete_bs
+  // Total ND redondeado a 2 decimales para registro contable
+  const nota_debito_total_bs = Math.round((nota_debito_leche_bs + nota_debito_flete_bs) * 100) / 100
   const deducciones_total_bs = deducciones.reduce((s, d) => s + Number(d.monto_bs), 0)
   const subtotal_bs = base_bs - deducciones_total_bs  // leche cruda − deducciones
   const base_islr_bs = subtotal_bs  // alias para display "Subtotal"

@@ -105,6 +105,8 @@ export default function FacturacionPage() {
   const [isDeleteBulkOpen, setIsDeleteBulkOpen] = useState(false)
   const [semDropOpen, setSemDropOpen] = useState(false)
   const [genFechaEmision, setGenFechaEmision] = useState('')
+  const [tasaEmision, setTasaEmision] = useState(0)   // tasa BCV de la fecha de emisión
+  const [ndRedondeada, setNdRedondeada] = useState(true) // toggle: mostrar ND redondeada a 2 dec
 
   // Exportación
   const [exporting, setExporting] = useState(false)
@@ -157,6 +159,13 @@ export default function FacturacionPage() {
 
     setLoading(false)
   }
+
+  // ── Cargar tasa BCV de la fecha de emisión seleccionada en el modal gen ───
+  useEffect(() => {
+    if (!genFechaEmision) { setTasaEmision(0); return }
+    supabase.from('tasas_bcv').select('tasa').eq('fecha', genFechaEmision).maybeSingle()
+      .then(({ data }) => setTasaEmision(data?.tasa || 0))
+  }, [genFechaEmision])
 
   // ── Filtrado ───────────────────────────────────────────────────────────────
   const filtered = useMemo(() => {
@@ -604,6 +613,7 @@ export default function FacturacionPage() {
           }
         }
 
+        const tasaFact = tasaEmision > 0 ? tasaEmision : item.tasa
         const calc = calcularFactura({
           litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
           litros_flete: incluyeFlete ? item.litros : 0,
@@ -612,7 +622,7 @@ export default function FacturacionPage() {
           precio_leche_bs: item.precio_leche_bs,
           precio_flete_bs: item.precio_flete_bs,
           tasa_miercoles: item.tasa,
-          tasa_factura: item.tasa,
+          tasa_factura: tasaFact,
           deducciones,
           incluye_flete: incluyeFlete,
           islr_rate: item.islr_pct,
@@ -631,7 +641,7 @@ export default function FacturacionPage() {
           fecha_emision: genFechaEmision || new Date().toISOString().split('T')[0],
           numero_factura: null,
           tasa_miercoles: item.tasa,
-          tasa_factura: item.tasa,
+          tasa_factura: tasaFact,
           precio_leche_usd: item.precio_leche_usd,
           precio_flete_usd: incluyeFlete ? item.precio_flete_usd : null,
           litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
@@ -1104,6 +1114,19 @@ export default function FacturacionPage() {
                   {genFechaEmision && (
                     <button onClick={() => setGenFechaEmision('')} className="text-xs text-slate-400 hover:text-slate-600">Usar hoy</button>
                   )}
+                  {tasaEmision > 0 && (
+                    <span className="text-xs text-blue-600 font-bold">Tasa emisión: {tasaEmision.toFixed(3)} Bs</span>
+                  )}
+                </div>
+                {/* Toggle redondeo ND */}
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-slate-500">Nota de Débito:</span>
+                  <button
+                    onClick={() => setNdRedondeada(v => !v)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border ${ndRedondeada ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'}`}
+                  >
+                    {ndRedondeada ? 'Redondeada (2 dec)' : 'Exacta (sin redondear)'}
+                  </button>
                 </div>
               </div>
               {!genRunning && !genDone && (
@@ -1194,6 +1217,21 @@ export default function FacturacionPage() {
                             {item.precio_flete_usd > 0 && <span><span className="font-bold">Flete:</span> $ {item.precio_flete_usd.toFixed(4)}/L</span>}
                             {(item.litros_faltantes || 0) > 0 && <span className="text-red-500"><span className="font-bold">Faltantes:</span> {item.litros_faltantes?.toLocaleString('es-VE')} L</span>}
                             {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
+                            {(() => {
+                              const tf = tasaEmision > 0 ? tasaEmision : item.tasa
+                              const baseLeche = item.litros * item.precio_leche_bs
+                              const baseFlete = (item.tipo !== 'ganadero') ? item.litros * item.precio_flete_bs : 0
+                              const ndLeche = item.tipo !== 'transportista' ? item.litros * item.precio_leche_usd * tf - baseLeche : 0
+                              const ndFlete = (item.tipo === 'ganadero_transportista' || item.tipo === 'transportista') ? item.litros * item.precio_flete_usd * tf - baseFlete : 0
+                              const ndRaw = ndLeche + ndFlete
+                              if (Math.abs(ndRaw) < 0.001) return null
+                              const ndVal = ndRedondeada ? Math.round(ndRaw * 100) / 100 : ndRaw
+                              return (
+                                <span className="text-amber-600 font-bold">
+                                  ND: {fmtBs(ndVal)}{!ndRedondeada && <span className="text-amber-400 font-normal"> (exacto: {ndRaw.toFixed(6)})</span>}
+                                </span>
+                              )
+                            })()}
                           </div>
                           <div className="flex items-center gap-2 mt-1.5">
                             <span className="text-[10px] text-slate-400 font-bold">ISLR %:</span>
