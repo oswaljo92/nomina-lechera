@@ -46,6 +46,8 @@ interface GenPreviewItem {
   litros_agua?: number
   precio_leche_usd: number
   precio_flete_usd: number
+  precio_leche_bs: number
+  precio_flete_bs: number
   existingFacturaId: string | null  // null = new
   // raw data for building the factura
   ganadero_id: string | null
@@ -389,9 +391,17 @@ export default function FacturacionPage() {
       const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
       return p?.precio_leche_usd || 0
     }
+    const getPrecioLecheBS = (codigoGanadero: string): number => {
+      const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
+      return p?.precio_leche_bs || 0
+    }
     const getPrecioFlete = (codigoRuta: string): number => {
       const p = precios.find(pr => (pr.rutas as string[]).includes(codigoRuta))
       return p?.precio_flete_usd || 0
+    }
+    const getPrecioFleteBS = (codigoRuta: string): number => {
+      const p = precios.find(pr => (pr.rutas as string[]).includes(codigoRuta))
+      return p?.precio_flete_bs || 0
     }
 
     const RUTA_TERCEROS = '300'
@@ -447,6 +457,10 @@ export default function FacturacionPage() {
       const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
       return p?.precio_flete_usd || 0
     }
+    const getPrecioFleteGanaderoBS = (codigoGanadero: string): number => {
+      const p = precios.find(pr => (pr.ganaderos as string[]).includes(codigoGanadero))
+      return p?.precio_flete_bs || 0
+    }
 
     // Check which ganaderos own their ruta
     const ganaderosConRutaPropia = new Set<string>()
@@ -486,6 +500,12 @@ export default function FacturacionPage() {
 
       const existFact = (existingFacts || []).find(ef => ef.ganadero_id === gid && (ef.tipo === tipo || ef.tipo === 'ganadero_transportista'))
       const precioLeche = getPrecioLeche(ganadero.codigo_ganadero)
+      const precioLecheBS = getPrecioLecheBS(ganadero.codigo_ganadero)
+      const precioFleteBS = ganaderosConRutaPropia.has(gid)
+        ? getPrecioFleteBS(Object.values(rutaMap).find(rv => rv.ruta.ganadero_id === gid)?.ruta.codigo_ruta || '')
+        : esRuta300
+          ? getPrecioFleteGanaderoBS(ganadero.codigo_ganadero)
+          : 0
 
       // ISLR: override del ganadero prevalece; si no, default según tipo
       const defaultIslr = esRuta300
@@ -506,6 +526,8 @@ export default function FacturacionPage() {
         litros_agua: litrosAgua,
         precio_leche_usd: precioLeche,
         precio_flete_usd: precioFlete,
+        precio_leche_bs: precioLecheBS,
+        precio_flete_bs: precioFleteBS,
         existingFacturaId: existFact?.id || null,
         ganadero_id: gid,
         ruta_id: rutaId,
@@ -522,6 +544,7 @@ export default function FacturacionPage() {
       if (rv.ruta.ganadero_id && ganaderoMap[rv.ruta.ganadero_id]) continue // ya incluido como ganadero_transportista
       const existFact = (existingFacts || []).find(ef => ef.ruta_id === rid && ef.tipo === 'transportista')
       const precioFlete = getPrecioFlete(rv.ruta.codigo_ruta)
+      const precioFleteBS2 = getPrecioFleteBS(rv.ruta.codigo_ruta)
       const litrosFaltantes = Math.ceil(Math.max(0, rv.litrosRomana - rv.litrosGanaderos))
       const precDeducRuta = (precDeducData || []).find(pd => pd.ruta_id === rid)
 
@@ -536,6 +559,8 @@ export default function FacturacionPage() {
         litros_agua: rv.litrosAgua,
         precio_leche_usd: 0,
         precio_flete_usd: precioFlete,
+        precio_leche_bs: 0,
+        precio_flete_bs: precioFleteBS2,
         existingFacturaId: existFact?.id || null,
         ganadero_id: null,
         ruta_id: rid,
@@ -584,6 +609,8 @@ export default function FacturacionPage() {
           litros_flete: incluyeFlete ? item.litros : 0,
           precio_leche_usd: item.precio_leche_usd,
           precio_flete_usd: item.precio_flete_usd,
+          precio_leche_bs: item.precio_leche_bs,
+          precio_flete_bs: item.precio_flete_bs,
           tasa_miercoles: item.tasa,
           tasa_factura: item.tasa,
           deducciones,

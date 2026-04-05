@@ -56,13 +56,14 @@ export function getSemanaNumero(wednesdayIso: string): number {
 // ── Cálculo de factura ───────────────────────────────────────────────────────
 
 /**
- * Pipeline contable (Opción A — confirmado por usuario):
- *   base_bs         = litros_a_pagar × precio_leche_usd × tasa_miercoles
- *   nota_deb_leche  = litros_a_pagar × precio_leche_usd × (tasa_factura − tasa_miercoles)
- *   flete_bs        = litros_flete × precio_flete_usd × tasa_miercoles  (si aplica)
- *   nota_deb_flete  = litros_flete × precio_flete_usd × (tasa_factura − tasa_miercoles)  (si aplica)
+ * Pipeline contable:
+ *   pl_bs           = precio_leche_bs (3 dec) si viene; si no: round(precio_leche_usd × tasa_miercoles, 3)
+ *   base_bs         = litros_a_pagar × pl_bs                                  (directo en Bs)
+ *   nota_deb_leche  = litros_a_pagar × pl_bs × (tasa_factura − tasa_miercoles) / tasa_miercoles
+ *   flete_bs        = litros_flete × pf_bs                                     (si aplica)
+ *   nota_deb_flete  = litros_flete × pf_bs × (tasa_factura − tasa_miercoles) / tasa_miercoles
  *   subtotal_bs     = base_bs − ded_total  (leche cruda menos deducciones)
- *   islr_bs         = subtotal_bs × 1%  (retención referencial, no afecta el total)
+ *   islr_bs         = subtotal_bs × tasa_islr  (retención referencial, no afecta el total)
  *   total_bs        = subtotal_bs + flete_bs  (flete solo si ganadero_transportista o transportista)
  */
 export const ISLR_TERCERO = 0.03        // 3%   — terceros (ruta 300)
@@ -78,7 +79,9 @@ export function calcularFactura(params: {
   tasa_factura: number
   deducciones: Pick<FacturaDeduccion, 'monto_bs'>[]
   incluye_flete: boolean
-  islr_rate?: number   // fracción: 0.03 = 3%, 0.0099302 = 0.99302% — si omitido usa ISLR_DEFAULT
+  islr_rate?: number        // fracción: 0.03 = 3%, 0.0099302 = 0.99302% — si omitido usa ISLR_DEFAULT
+  precio_leche_bs?: number  // precio directo en Bs/L con 3 decimales (de precios_semanales)
+  precio_flete_bs?: number  // precio flete directo en Bs/L con 3 decimales
 }): FacturaCalcResult {
   const {
     litros_a_pagar, litros_flete,
@@ -86,20 +89,31 @@ export function calcularFactura(params: {
     tasa_miercoles, tasa_factura,
     deducciones, incluye_flete,
     islr_rate = ISLR_DEFAULT,
+    precio_leche_bs: pl_bs_raw,
+    precio_flete_bs: pf_bs_raw,
   } = params
 
-  // Precios redondeados a 3 decimales para cálculo consistente
-  const pl = Math.round(precio_leche_usd * 1000) / 1000
-  const pf = Math.round(precio_flete_usd * 1000) / 1000
+  // Precio en Bs/L con 3 decimales: usa el valor directo si viene, sino lo deriva de USD × tasa
+  const pl_bs = (pl_bs_raw != null && pl_bs_raw > 0)
+    ? Math.round(pl_bs_raw * 1000) / 1000
+    : Math.round(precio_leche_usd * tasa_miercoles * 1000) / 1000
+  const pf_bs = (pf_bs_raw != null && pf_bs_raw > 0)
+    ? Math.round(pf_bs_raw * 1000) / 1000
+    : Math.round(precio_flete_usd * tasa_miercoles * 1000) / 1000
 
-  const base_bs = litros_a_pagar * pl * tasa_miercoles
-  const nota_debito_leche_bs = litros_a_pagar * pl * (tasa_factura - tasa_miercoles)
+  const base_bs = litros_a_pagar * pl_bs
+  // Nota de débito: diferencial de tasa sobre el precio Bs base
+  const nota_debito_leche_bs = tasa_miercoles > 0
+    ? litros_a_pagar * pl_bs * (tasa_factura - tasa_miercoles) / tasa_miercoles
+    : 0
 
   let flete_bs = 0
   let nota_debito_flete_bs = 0
-  if (incluye_flete && litros_flete > 0 && pf > 0) {
-    flete_bs = litros_flete * pf * tasa_miercoles
-    nota_debito_flete_bs = litros_flete * pf * (tasa_factura - tasa_miercoles)
+  if (incluye_flete && litros_flete > 0 && pf_bs > 0) {
+    flete_bs = litros_flete * pf_bs
+    nota_debito_flete_bs = tasa_miercoles > 0
+      ? litros_flete * pf_bs * (tasa_factura - tasa_miercoles) / tasa_miercoles
+      : 0
   }
 
   const nota_debito_total_bs = nota_debito_leche_bs + nota_debito_flete_bs

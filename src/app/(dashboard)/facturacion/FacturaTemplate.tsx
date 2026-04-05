@@ -30,12 +30,18 @@ export default function FacturaTemplate({
 
   const islrRate = factura.islr_pct ?? ISLR_DEFAULT
 
+  // Precios Bs/L con 3 decimales (derivados de USD × tasa_miercoles almacenada)
+  const precio_leche_bs = Math.round(factura.precio_leche_usd * factura.tasa_miercoles * 1000) / 1000
+  const precio_flete_bs = Math.round((factura.precio_flete_usd ?? 0) * factura.tasa_miercoles * 1000) / 1000
+
   // Recalcular con deducciones actuales (para previsualización dinámica)
   const calc = calcularFactura({
     litros_a_pagar: factura.litros_a_pagar,
     litros_flete: factura.litros_flete ?? 0,
     precio_leche_usd: factura.precio_leche_usd,
     precio_flete_usd: factura.precio_flete_usd ?? 0,
+    precio_leche_bs,
+    precio_flete_bs,
     tasa_miercoles: factura.tasa_miercoles,
     tasa_factura: factura.tasa_factura,
     deducciones,
@@ -151,7 +157,7 @@ export default function FacturaTemplate({
                 <tr>
                   <td className="py-2.5 font-medium text-slate-700">Leche cruda — {fmtNum(factura.litros_a_pagar, 0)} L</td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_a_pagar, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtBs(factura.precio_leche_usd * factura.tasa_miercoles)}</td>
+                  <td className="py-2.5 text-right text-slate-600">Bs {fmtNum(precio_leche_bs, 3)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.base_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -177,7 +183,7 @@ export default function FacturaTemplate({
                     Servicio de flete — {fmtNum(factura.litros_flete, 0)} L
                   </td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_flete, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtBs(factura.precio_flete_usd * factura.tasa_miercoles)}</td>
+                  <td className="py-2.5 text-right text-slate-600">Bs {fmtNum(precio_flete_bs, 3)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.flete_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -203,7 +209,7 @@ export default function FacturaTemplate({
                     Servicio de flete — {fmtNum(factura.litros_flete, 0)} L
                   </td>
                   <td className="py-2.5 text-right text-slate-600">{fmtNum(factura.litros_flete, 0)}</td>
-                  <td className="py-2.5 text-right text-slate-600">{fmtBs((factura.precio_flete_usd ?? 0) * factura.tasa_miercoles)}</td>
+                  <td className="py-2.5 text-right text-slate-600">Bs {fmtNum(precio_flete_bs, 3)}</td>
                   <td className="py-2.5 text-right font-semibold text-slate-800">{fmt(display.flete_bs)}</td>
                 </tr>
                 {(factura.tasa_factura !== factura.tasa_miercoles) && (
@@ -226,31 +232,52 @@ export default function FacturaTemplate({
 
       {/* ── FOOTER: TOTALES ──────────────────────────────────────── */}
       <div className="px-8 pb-8">
-        <div className="ml-auto max-w-xs space-y-1.5 border-t-2 border-slate-300 pt-3">
+        <div className="flex gap-6 border-t-2 border-slate-300 pt-3 items-start">
 
-          {(factura.tasa_factura !== factura.tasa_miercoles) && (
-            <FooterRow
-              label="Total Nota de Débito"
-              value={fmt(display.nota_debito_total_bs)}
-              accent="amber"
-            />
-          )}
-
-          {/* Subtotal = leche cruda − deducciones */}
-          <FooterRow label="Subtotal" value={fmt(display.base_islr_bs)} />
-
-          {incluyeFlete && display.flete_bs > 0 && (
-            <FooterRow label="Flete" value={fmt(display.flete_bs)} />
-          )}
-
-          <div className="border-t border-slate-200 pt-1.5">
-            <FooterRow label={`ISLR retención (${(islrRate * 100).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 5 })}%) — ref.`} value={fmt(display.islr_bs)} accent="orange" />
+          {/* ── Izquierda: Nota de Débito ─────────────────────────── */}
+          <div className="flex-1">
+            {(factura.tasa_factura !== factura.tasa_miercoles) && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-1.5">
+                <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-2">Nota de Débito Diferencial</p>
+                {calc.nota_debito_leche_bs > 0 && (
+                  <FooterRow
+                    label={`Leche — ${fmtNum(factura.litros_a_pagar, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$`}
+                    value={fmt(display.nota_debito_leche_bs)}
+                    accent="amber"
+                  />
+                )}
+                {incluyeFlete && calc.nota_debito_flete_bs > 0 && (
+                  <FooterRow
+                    label={`Flete — ${fmtNum(factura.litros_flete ?? 0, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$`}
+                    value={fmt(display.nota_debito_flete_bs)}
+                    accent="amber"
+                  />
+                )}
+                <div className="border-t border-amber-300 pt-1.5">
+                  <FooterRow label="Total Nota de Débito" value={fmt(display.nota_debito_total_bs)} accent="amber" bold />
+                </div>
+              </div>
+            )}
           </div>
 
-          <div className="border-t-2 border-slate-800 pt-2">
-            <div className="flex justify-between items-center">
-              <span className="font-black text-slate-800 text-sm uppercase tracking-wide">Total a facturar</span>
-              <span className="font-black text-slate-800 text-base">{fmt(display.total_bs)}</span>
+          {/* ── Derecha: Subtotal / ISLR / Total ─────────────────── */}
+          <div className="min-w-[230px] space-y-1.5">
+            {/* Subtotal = leche cruda − deducciones */}
+            <FooterRow label="Subtotal" value={fmt(display.base_islr_bs)} />
+
+            {incluyeFlete && display.flete_bs > 0 && (
+              <FooterRow label="Flete" value={fmt(display.flete_bs)} />
+            )}
+
+            <div className="border-t border-slate-200 pt-1.5">
+              <FooterRow label={`ISLR retención (${(islrRate * 100).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 5 })}%) — ref.`} value={fmt(display.islr_bs)} accent="orange" />
+            </div>
+
+            <div className="border-t-2 border-slate-800 pt-2">
+              <div className="flex justify-between items-center">
+                <span className="font-black text-slate-800 text-sm uppercase tracking-wide">Total a facturar</span>
+                <span className="font-black text-slate-800 text-base">{fmt(display.total_bs)}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -273,24 +300,25 @@ export default function FacturaTemplate({
 }
 
 function FooterRow({
-  label, value, accent,
+  label, value, accent, bold,
 }: {
   label: string
   value: string
   accent?: 'red' | 'amber' | 'orange'
+  bold?: boolean
 }) {
   const color = accent === 'red'
     ? 'text-red-600'
     : accent === 'amber'
-    ? 'text-amber-600'
+    ? 'text-amber-700'
     : accent === 'orange'
     ? 'text-orange-600'
     : 'text-slate-700'
 
   return (
     <div className="flex justify-between items-baseline gap-4">
-      <span className={`text-xs ${color}`}>{label}</span>
-      <span className={`text-xs font-semibold ${color} whitespace-nowrap`}>{value}</span>
+      <span className={`text-xs ${bold ? 'font-bold' : ''} ${color}`}>{label}</span>
+      <span className={`text-xs ${bold ? 'font-black' : 'font-semibold'} ${color} whitespace-nowrap`}>{value}</span>
     </div>
   )
 }

@@ -66,6 +66,10 @@ export default function FacturaFormModal({
   // Flete manual
   const [tieneFlete, setTieneFlete] = useState(false)
 
+  // Precios en Bs/L (3 decimales) cargados de precios_semanales
+  const [precioBsLeche, setPrecioBsLeche] = useState(0)
+  const [precioBsFlete, setPrecioBsFlete] = useState(0)
+
   // Búsqueda de ganadero
   const [searchGanadero, setSearchGanadero] = useState('')
   const [showGanDropdown, setShowGanDropdown] = useState(false)
@@ -130,6 +134,9 @@ export default function FacturaFormModal({
 
     if (editFactura) {
       setTieneFlete(editFactura.tipo === 'ganadero_transportista')
+      // Derivar precios Bs desde USD × tasa almacenada en la factura
+      setPrecioBsLeche(Math.round(editFactura.precio_leche_usd * editFactura.tasa_miercoles * 1000) / 1000)
+      setPrecioBsFlete(Math.round((editFactura.precio_flete_usd ?? 0) * editFactura.tasa_miercoles * 1000) / 1000)
       setForm({
         fabrica_id: editFactura.fabrica_id,
         tipo: editFactura.tipo,
@@ -160,6 +167,8 @@ export default function FacturaFormModal({
       const today = new Date().toISOString().split('T')[0]
       setTieneFlete(false)
       setSearchGanadero('')
+      setPrecioBsLeche(0)
+      setPrecioBsFlete(0)
       setForm({
         ...EMPTY_FORM,
         fabrica_id: fabId,
@@ -274,13 +283,15 @@ export default function FacturaFormModal({
     // Precio semanal por grupo
     const { data: precioData } = await supabase
       .from('precios_semanales')
-      .select('precio_leche_usd, precio_flete_usd')
+      .select('precio_leche_usd, precio_flete_usd, precio_leche_bs, precio_flete_bs')
       .eq('fecha_semana', semanaFecha)
       .eq('grupo', gan.grupo)
       .maybeSingle()
 
     const precioLeche = Number(precioData?.precio_leche_usd ?? 0)
     const precioFlete = Number(precioData?.precio_flete_usd ?? 0)
+    setPrecioBsLeche(Number(precioData?.precio_leche_bs ?? 0))
+    setPrecioBsFlete(Number(precioData?.precio_flete_bs ?? 0))
 
     // Determinar si ganadero == transportista (por RIF o cédula)
     const ruta = Array.isArray(gan.rutas) ? gan.rutas[0] : gan.rutas
@@ -436,12 +447,14 @@ export default function FacturaFormModal({
 
     const { data: precioData } = await supabase
       .from('precios_semanales')
-      .select('precio_flete_usd')
+      .select('precio_flete_usd, precio_flete_bs')
       .eq('fecha_semana', semanaFecha)
       .eq('grupo', ruta.grupo)
       .maybeSingle()
 
     const precioFlete = Number(precioData?.precio_flete_usd ?? 0)
+    setPrecioBsLeche(0)
+    setPrecioBsFlete(Number(precioData?.precio_flete_bs ?? 0))
 
     setForm(f => ({
       ...f,
@@ -464,6 +477,8 @@ export default function FacturaFormModal({
     litros_flete: form.litros_flete,
     precio_leche_usd: form.precio_leche_usd,
     precio_flete_usd: form.precio_flete_usd,
+    precio_leche_bs: precioBsLeche,
+    precio_flete_bs: precioBsFlete,
     tasa_miercoles: form.tasa_miercoles,
     tasa_factura: form.tasa_factura,
     deducciones: form.deducciones,

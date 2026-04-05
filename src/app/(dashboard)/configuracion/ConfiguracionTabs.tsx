@@ -1119,12 +1119,14 @@ function PreciosRow({ p, tasaBase, ganaderosList, actualizarPrecio, borrarPrecio
 
   const handleSave = async () => {
      if (!grupoNombre || ganaderosStr.length === 0) { await showAlert('Ingrese un Grupo y seleccione al menos un Ganadero.', { kind: 'error' }); return }  // eslint-disable-line
-     actualizarPrecio(p.id, { 
+     actualizarPrecio(p.id, {
        grupo: grupoNombre,
        ganaderos: ganaderosStr,
        rutas: rutasList,
-       precio_leche_usd: Number(lecheUSD), 
+       precio_leche_usd: Number(lecheUSD),
        precio_flete_usd: Number(fleteUSD),
+       precio_leche_bs: Math.round(Number(lecheUSD) * tasaBase * 1000) / 1000,
+       precio_flete_bs: Math.round(Number(fleteUSD) * tasaBase * 1000) / 1000,
        total_pagar_usd: Number(totalUSD),
        total_pagar_bs: Number(totalBs)
      })
@@ -1526,6 +1528,8 @@ function PreciosTab({ user, onOpenBitacora }: { user: any, onOpenBitacora?: () =
         rutas: Array.from(rutasSet),
         precio_leche_usd: precioLeche,
         precio_flete_usd: precioFlete,
+        precio_leche_bs: Math.round(precioLeche * tasaBase * 1000) / 1000,
+        precio_flete_bs: Math.round(precioFlete * tasaBase * 1000) / 1000,
         total_pagar_usd,
         total_pagar_bs
       }
