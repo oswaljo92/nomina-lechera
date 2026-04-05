@@ -61,6 +61,8 @@ export interface Factura {
   emisor_rif: string
   emisor_direccion: string
 
+  islr_pct: number | null   // % ISLR real aplicado (0.01 = 1%, 0.03 = 3%, etc.)
+
   estado: EstadoFactura
   notas: string | null
   created_at: string

@@ -65,6 +65,10 @@ export function getSemanaNumero(wednesdayIso: string): number {
  *   islr_bs         = subtotal_bs × 1%  (retención referencial, no afecta el total)
  *   total_bs        = subtotal_bs + flete_bs  (flete solo si ganadero_transportista o transportista)
  */
+export const ISLR_TERCERO = 0.03        // 3%   — terceros (ruta 300)
+export const ISLR_PROPIO  = 0.0099302   // 0.99302% — propios ganadero+transportista
+export const ISLR_DEFAULT = 0.01        // 1%   — ganadero puro (sin flete)
+
 export function calcularFactura(params: {
   litros_a_pagar: number
   litros_flete: number
@@ -74,12 +78,14 @@ export function calcularFactura(params: {
   tasa_factura: number
   deducciones: Pick<FacturaDeduccion, 'monto_bs'>[]
   incluye_flete: boolean
+  islr_rate?: number   // fracción: 0.03 = 3%, 0.0099302 = 0.99302% — si omitido usa ISLR_DEFAULT
 }): FacturaCalcResult {
   const {
     litros_a_pagar, litros_flete,
     precio_leche_usd, precio_flete_usd,
     tasa_miercoles, tasa_factura,
     deducciones, incluye_flete,
+    islr_rate = ISLR_DEFAULT,
   } = params
 
   // Precios redondeados a 3 decimales para cálculo consistente
@@ -100,7 +106,7 @@ export function calcularFactura(params: {
   const deducciones_total_bs = deducciones.reduce((s, d) => s + Number(d.monto_bs), 0)
   const subtotal_bs = base_bs - deducciones_total_bs  // leche cruda − deducciones
   const base_islr_bs = subtotal_bs  // alias mantenido para compatibilidad
-  const islr_bs = subtotal_bs * 0.01  // retención referencial (no afecta el total)
+  const islr_bs = subtotal_bs * islr_rate  // retención referencial (no afecta el total)
   const total_bs = subtotal_bs + (incluye_flete ? flete_bs : 0)
 
   return {

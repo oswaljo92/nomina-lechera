@@ -5,7 +5,7 @@ import { DollarSign } from 'lucide-react'
 import type { Factura, FacturaDeduccion } from '@/types/facturacion'
 import {
   fmtBs, fmtUSD, fmtNum, formatDateDisplay, getSemanaNumero,
-  calcularFactura, calcToUSD,
+  calcularFactura, calcToUSD, ISLR_DEFAULT,
 } from '@/lib/facturacion-utils'
 
 interface FacturaTemplateProps {
@@ -28,6 +28,8 @@ export default function FacturaTemplate({
   const incluyeFlete = factura.tipo === 'ganadero_transportista' || factura.tipo === 'transportista'
   const semanaNum = getSemanaNumero(factura.semana_fecha)
 
+  const islrRate = factura.islr_pct ?? ISLR_DEFAULT
+
   // Recalcular con deducciones actuales (para previsualización dinámica)
   const calc = calcularFactura({
     litros_a_pagar: factura.litros_a_pagar,
@@ -38,6 +40,7 @@ export default function FacturaTemplate({
     tasa_factura: factura.tasa_factura,
     deducciones,
     incluye_flete: incluyeFlete,
+    islr_rate: islrRate,
   })
 
   const display = moneda === 'usd' ? calcToUSD(calc, factura.tasa_factura) : calc
@@ -241,7 +244,7 @@ export default function FacturaTemplate({
           )}
 
           <div className="border-t border-slate-200 pt-1.5">
-            <FooterRow label="ISLR retención (1%) — ref." value={fmt(display.islr_bs)} accent="orange" />
+            <FooterRow label={`ISLR retención (${(islrRate * 100).toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 5 })}%) — ref.`} value={fmt(display.islr_bs)} accent="orange" />
           </div>
 
           <div className="border-t-2 border-slate-800 pt-2">

@@ -13,7 +13,7 @@ import { logAction } from '@/lib/log-utils'
 import {
   fmtBs, fmtUSD, formatDateDisplay, formatSemanaGanadera,
   buildFacturaFilename, calcularFactura, getCurrentWednesday,
-  getWednesdayOfDate,
+  getWednesdayOfDate, ISLR_TERCERO, ISLR_PROPIO, ISLR_DEFAULT,
 } from '@/lib/facturacion-utils'
 import {
   downloadFacturaPDF, downloadFacturaImage, exportFacturasToZip,
@@ -53,6 +53,7 @@ interface GenPreviewItem {
   tasa: number
   emisor: { razon_social: string; rif: string; direccion_fiscal: string }
   precio_deduccion_usd: number  // for 090/92
+  islr_pct: number   // fracción: 0.03, 0.0099302, etc.
 }
 
 export default function FacturacionPage() {
@@ -367,7 +368,7 @@ export default function FacturacionPage() {
 
     // Recepciones del período
     const { data: camiones } = await supabase.from('recepciones_camion')
-      .select('id, ruta_id, litros_romana, agua_transporte, rutas(id, codigo_ruta, nombre_ruta, cedula, rif, grupo, ganadero_id), recepciones_detalle(ganadero_id, litros_recepcion, litros_a_pagar, ganaderos(id, codigo_ganadero, nombre, cedula, rif, grupo))')
+      .select('id, ruta_id, litros_romana, agua_transporte, rutas(id, codigo_ruta, nombre_ruta, cedula, rif, grupo, ganadero_id), recepciones_detalle(ganadero_id, litros_recepcion, litros_a_pagar, ganaderos(id, codigo_ganadero, nombre, cedula, rif, grupo, porcentaje_islr))')
       .eq('fabrica_id', selectedFabricaId)
       .gte('fecha_ingreso', fechaInicio + 'T00:00:00Z')
       .lte('fecha_ingreso', fechaFin + 'T23:59:59Z')
@@ -486,6 +487,14 @@ export default function FacturacionPage() {
       const existFact = (existingFacts || []).find(ef => ef.ganadero_id === gid && (ef.tipo === tipo || ef.tipo === 'ganadero_transportista'))
       const precioLeche = getPrecioLeche(ganadero.codigo_ganadero)
 
+      // ISLR: override del ganadero prevalece; si no, default según tipo
+      const defaultIslr = esRuta300
+        ? ISLR_TERCERO
+        : ganaderosConRutaPropia.has(gid)
+          ? ISLR_PROPIO
+          : ISLR_DEFAULT
+      const islr_pct = ganadero.porcentaje_islr != null ? Number(ganadero.porcentaje_islr) : defaultIslr
+
       items.push({
         key: gid,
         tipo,
@@ -503,6 +512,7 @@ export default function FacturacionPage() {
         tasa,
         emisor,
         precio_deduccion_usd: precDeducRuta?.precio_deduccion_usd || 0,
+        islr_pct,
       })
     }
 
@@ -532,6 +542,7 @@ export default function FacturacionPage() {
         tasa,
         emisor,
         precio_deduccion_usd: precDeducRuta?.precio_deduccion_usd || 0,
+        islr_pct: ISLR_TERCERO, // transportistas puros = terceros → 3%
       })
     }
 
@@ -577,6 +588,7 @@ export default function FacturacionPage() {
           tasa_factura: item.tasa,
           deducciones,
           incluye_flete: incluyeFlete,
+          islr_rate: item.islr_pct,
         })
 
         const facturaPayload = {
@@ -598,6 +610,7 @@ export default function FacturacionPage() {
           litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
           litros_flete: incluyeFlete ? item.litros : null,
           ...calc,
+          islr_pct: item.islr_pct,
           emisor_razon_social: item.emisor.razon_social,
           emisor_rif: item.emisor.rif,
           emisor_direccion: item.emisor.direccion_fiscal,
@@ -1154,6 +1167,22 @@ export default function FacturacionPage() {
                             {item.precio_flete_usd > 0 && <span><span className="font-bold">Flete:</span> $ {item.precio_flete_usd.toFixed(4)}/L</span>}
                             {(item.litros_faltantes || 0) > 0 && <span className="text-red-500"><span className="font-bold">Faltantes:</span> {item.litros_faltantes?.toLocaleString('es-VE')} L</span>}
                             {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-[10px] text-slate-400 font-bold">ISLR %:</span>
+                            <input
+                              type="number"
+                              step="0.00001"
+                              min="0"
+                              max="100"
+                              value={(item.islr_pct * 100).toFixed(5)}
+                              onChange={e => {
+                                const val = Number(e.target.value) / 100
+                                setGenPreview(prev => prev.map(p => p.key === item.key ? { ...p, islr_pct: val } : p))
+                              }}
+                              className="w-28 text-[10px] border border-slate-300 rounded px-1.5 py-0.5 font-bold focus:ring-1 focus:ring-blue-400 focus:outline-none"
+                            />
+                            <span className="text-[10px] text-slate-400">%</span>
                           </div>
                         </div>
                       </label>

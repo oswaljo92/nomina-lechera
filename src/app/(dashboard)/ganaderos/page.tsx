@@ -144,6 +144,7 @@ export default function GanaderosPage() {
       ubicacion: editGanadero.ubicacion || null,
       tipo_proveedor: editGanadero.tipo_proveedor,
       activo: editGanadero.activo !== false,
+      porcentaje_islr: editGanadero.porcentaje_islr ?? null,
       ...(editGanadero.fabrica_id ? { fabrica_id: editGanadero.fabrica_id } : {})
     }
 
@@ -645,8 +646,25 @@ export default function GanaderosPage() {
                     {rutasDisponibles.map(r => <option key={r.id} value={r.id}>{r.codigo_ruta} - {r.nombre_ruta}</option>)}
                   </select>
                 </div>
-                <div className="sm:col-span-3">
-                  <label className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">% ISLR (override)</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.00001"
+                      min="0"
+                      max="100"
+                      value={editGanadero.porcentaje_islr != null ? (editGanadero.porcentaje_islr * 100).toFixed(5) : ''}
+                      onChange={e => setEditGanadero({ ...editGanadero, porcentaje_islr: e.target.value === '' ? null : Number(e.target.value) / 100 })}
+                      placeholder="Dejar vacío = automático"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-sm font-bold focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span className="text-xs text-slate-400 shrink-0">%</span>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">Vacío = auto (Tercero: 3%, Propio: 0.99302%)</p>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 cursor-pointer h-full">
                     <input type="checkbox" checked={editGanadero.activo !== false} onChange={e => setEditGanadero({ ...editGanadero, activo: e.target.checked })} className="w-4 h-4 rounded text-blue-600" />
                     <span className="text-xs font-bold text-slate-700">Ganadero Activo</span>
                   </label>
