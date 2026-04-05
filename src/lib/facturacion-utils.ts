@@ -119,8 +119,8 @@ export function calcularFactura(params: {
   const nota_debito_total_bs = nota_debito_leche_bs + nota_debito_flete_bs
   const deducciones_total_bs = deducciones.reduce((s, d) => s + Number(d.monto_bs), 0)
   const subtotal_bs = base_bs - deducciones_total_bs  // leche cruda − deducciones
-  const base_islr_bs = subtotal_bs  // alias mantenido para compatibilidad
-  const islr_bs = subtotal_bs * islr_rate  // retención referencial (no afecta el total)
+  const base_islr_bs = subtotal_bs  // alias para display "Subtotal"
+  const islr_bs = flete_bs * islr_rate  // ISLR sólo sobre servicio de flete (no sobre leche)
   const total_bs = subtotal_bs + (incluye_flete ? flete_bs : 0)
 
   return {
