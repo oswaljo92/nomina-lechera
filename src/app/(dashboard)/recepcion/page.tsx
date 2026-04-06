@@ -708,24 +708,24 @@ export default function RecepcionPage() {
                </button>
             )}
          </div>
-         <div className="p-2 bg-slate-50 flex flex-col sm:flex-row gap-4 items-center justify-between">
-            <div className="flex gap-2 p-1 bg-slate-200/50 rounded-xl overflow-x-auto w-full sm:w-auto">
-               <button onClick={()=>setTab('nuevo')} className={`flex items-center gap-2 px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${tab === 'nuevo' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'}`}>
+         <div className="p-2 bg-slate-50 flex flex-col gap-2 sm:flex-row sm:gap-4 sm:items-center sm:justify-between">
+            <div className="flex gap-2 p-1 bg-slate-200/50 rounded-xl w-full sm:w-auto">
+               <button onClick={()=>setTab('nuevo')} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${tab === 'nuevo' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'}`}>
                   <Plus size={16}/> {camion.id ? 'Editando' : 'Carga de Camión'}
                </button>
-               <button onClick={()=>setTab('historial')} className={`flex items-center gap-2 px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${tab === 'historial' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'}`}>
+               <button onClick={()=>setTab('historial')} className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 sm:px-6 py-2 rounded-lg text-xs sm:text-sm font-semibold transition-all whitespace-nowrap ${tab === 'historial' ? 'bg-white text-blue-700 shadow-sm' : 'text-slate-600 hover:text-slate-800 hover:bg-slate-200'}`}>
                   <List size={16}/> Historial
                </button>
             </div>
-            <div className="flex gap-3 items-center w-full sm:w-auto justify-end px-2">
+            <div className="flex gap-2 items-center w-full sm:w-auto sm:justify-end px-1">
                {isAdmin && (
-                 <button onClick={() => setIsBitacoraOpen(true)} className="flex items-center gap-2 px-3 py-1.5 font-bold text-slate-500 hover:text-slate-800 text-xs">
-                   <History size={16} /> Bitácora
+                 <button onClick={() => setIsBitacoraOpen(true)} className="flex items-center gap-2 px-3 py-2 font-bold text-slate-500 hover:text-slate-800 text-xs rounded-xl border border-slate-200 bg-white">
+                   <History size={15} /> Bitácora
                  </button>
                )}
                {camion.id && tab === 'nuevo' && (
-                  <button onClick={cancelEdit} className="text-xs font-bold text-red-500 hover:text-red-700 flex items-center gap-1">
-                    <X size={14} /> Cancelar edición
+                  <button onClick={cancelEdit} className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl font-bold text-sm bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition-all">
+                    <X size={15} /> Cancelar edición
                   </button>
                )}
             </div>
@@ -819,24 +819,29 @@ export default function RecepcionPage() {
                      <input type="text" placeholder="Filtrar dentro de la semana..." value={filtroHistorial} onChange={e => setFiltroHistorial(e.target.value)} className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-300 text-sm font-semibold focus:ring-2 focus:ring-blue-500"/>
                   </div>
                   {selectedHistorialIds.size > 0 && isAdmin && (
-                    <button onClick={() => setIsDeleteModalOpen(true)} className="bg-red-50 text-red-700 font-bold px-4 py-2 rounded-xl flex items-center justify-center gap-2 border border-red-100 shrink-0">
+                    <button onClick={() => setIsDeleteModalOpen(true)} className="w-full sm:w-auto bg-red-50 text-red-700 font-bold px-4 py-2.5 rounded-xl flex items-center justify-center gap-2 border border-red-100">
                       <Trash2 size={16} /> Borrar ({selectedHistorialIds.size})
                     </button>
                   )}
-                  <button onClick={handleDescargarPlantilla} className="flex items-center gap-2 px-3 py-2 font-bold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl bg-white shadow-sm text-xs shrink-0">
-                    <FileSpreadsheet size={15} /> Plantilla
-                  </button>
-                  <button onClick={handleExport} className="flex items-center gap-2 px-3 py-2 font-bold text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded-xl bg-emerald-50 shadow-sm text-xs shrink-0">
-                    <Download size={15} /> Exportar
-                  </button>
-                  {isAdmin && (
-                    <>
-                      <button onClick={() => importRef.current?.click()} disabled={!selectedFabricaId || selectedFabricaId === 'all'} className="flex items-center gap-2 px-3 py-2 font-bold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl bg-blue-50 shadow-sm text-xs shrink-0 disabled:opacity-40">
-                        <Upload size={15} /> Importar
-                      </button>
-                      <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImport} />
-                    </>
-                  )}
+                  {/* Plantilla / Exportar / Importar — grid en mobile, flex en desktop */}
+                  <div className="grid grid-cols-3 sm:flex gap-2 w-full sm:w-auto">
+                    <button onClick={handleDescargarPlantilla} className="flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold text-slate-600 hover:text-slate-900 border border-slate-200 rounded-xl bg-white shadow-sm text-xs">
+                      <FileSpreadsheet size={15} /> Plantilla
+                    </button>
+                    <button onClick={handleExport} className="flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold text-emerald-700 hover:text-emerald-900 border border-emerald-200 rounded-xl bg-emerald-50 shadow-sm text-xs">
+                      <Download size={15} /> Exportar
+                    </button>
+                    {isAdmin ? (
+                      <>
+                        <button onClick={() => importRef.current?.click()} disabled={!selectedFabricaId || selectedFabricaId === 'all'} className="flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl bg-blue-50 shadow-sm text-xs disabled:opacity-40">
+                          <Upload size={15} /> Importar
+                        </button>
+                        <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImport} />
+                      </>
+                    ) : (
+                      <div />
+                    )}
+                  </div>
                   {selectedSemanaHistorial && (
                     <div className="flex gap-3 shrink-0">
                       <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 text-center">
