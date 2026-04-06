@@ -102,14 +102,27 @@ export function calcularFactura(params: {
     : Math.round(precio_flete_usd * tasa_miercoles * 1000) / 1000
 
   const base_bs = litros_a_pagar * pl_bs
-  // Nota de débito: monto total a tasa de emisión menos lo ya calculado a tasa inicio de semana
-  const nota_debito_leche_bs = litros_a_pagar * precio_leche_usd * tasa_factura - base_bs
+
+  // Tasas redondeadas a 4 decimales — solo para el cálculo de la ND
+  const tm4 = Math.round(tasa_miercoles * 10000) / 10000
+  const tf4 = Math.round(tasa_factura   * 10000) / 10000
+  const pl_bs_nd = (pl_bs_raw != null && pl_bs_raw > 0)
+    ? Math.round(pl_bs_raw * 1000) / 1000
+    : Math.round(precio_leche_usd * tm4 * 1000) / 1000
+  const pf_bs_nd = (pf_bs_raw != null && pf_bs_raw > 0)
+    ? Math.round(pf_bs_raw * 1000) / 1000
+    : Math.round(precio_flete_usd * tm4 * 1000) / 1000
+  const base_bs_nd = litros_a_pagar * pl_bs_nd
+
+  // Nota de débito: monto total a tasa emisión (4 dec) menos base a tasa inicio semana (4 dec)
+  const nota_debito_leche_bs = litros_a_pagar * precio_leche_usd * tf4 - base_bs_nd
 
   let flete_bs = 0
   let nota_debito_flete_bs = 0
   if (incluye_flete && litros_flete > 0 && pf_bs > 0) {
     flete_bs = litros_flete * pf_bs
-    nota_debito_flete_bs = litros_flete * precio_flete_usd * tasa_factura - flete_bs
+    const flete_bs_nd = litros_flete * pf_bs_nd
+    nota_debito_flete_bs = litros_flete * precio_flete_usd * tf4 - flete_bs_nd
   }
 
   // Total ND redondeado a 2 decimales para registro contable

@@ -2201,7 +2201,7 @@ function PrecioDeduccionesTab({ user }: { user: any }) {
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="bg-slate-50 border-b border-slate-200 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="font-black text-slate-800 text-base flex items-center gap-2"><Truck size={16} className="text-orange-500" /> Precio de Deducciones</h2>
+            <h2 className="font-black text-slate-800 text-base flex items-center gap-2"><Truck size={20} className="text-orange-500" /> Dtos. Bs/$</h2>
             <p className="text-xs text-slate-500 mt-0.5">Precio base por litro para códigos 90 (faltante) y 92 (agua) — por ruta y semana.</p>
           </div>
           <div className="flex flex-wrap gap-3 items-center">
@@ -3350,7 +3350,7 @@ export default function ConfiguracionTabs({ initialRol }: { initialRol: string }
     { id: 'tasas', label: 'Tasas BCV', shortLabel: 'Tasas', icon: RefreshCcw, iconSize: 18 },
     { id: 'crioscopia', label: 'Tabla Crioscopía', shortLabel: 'Crioscopía', icon: FileSpreadsheet, iconSize: 18 },
     { id: 'precios', label: 'Precios', shortLabel: 'Precios', icon: Calculator, iconSize: 18 },
-    { id: 'precios-deducciones', label: 'Precio Deducciones', shortLabel: 'Deduc.', icon: Truck, iconSize: 20 },
+    { id: 'precios-deducciones', label: 'Dtos. Bs/$', shortLabel: 'Dtos.', icon: Truck, iconSize: 20 },
     { id: 'fabricas', label: 'Fábricas', shortLabel: 'Fábricas', icon: Building2, iconSize: 18 },
     { id: 'facturacion', label: 'Facturación', shortLabel: 'Fact.', icon: Receipt, iconSize: 18 },
     { id: 'vitacora', label: 'Bitácora', shortLabel: 'Bitácora', icon: History, iconSize: 18, adminOnly: true },

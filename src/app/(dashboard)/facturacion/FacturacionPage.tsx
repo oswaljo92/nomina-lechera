@@ -1115,7 +1115,7 @@ export default function FacturacionPage() {
                     <button onClick={() => setGenFechaEmision('')} className="text-xs text-slate-400 hover:text-slate-600">Usar hoy</button>
                   )}
                   {tasaEmision > 0 && (
-                    <span className="text-xs text-blue-600 font-bold">Tasa emisión: {tasaEmision.toFixed(3)} Bs</span>
+                    <span className="text-xs text-blue-600 font-bold">Tasa emisión: {tasaEmision.toFixed(4)} Bs</span>
                   )}
                 </div>
                 {/* Toggle redondeo ND */}
@@ -1218,7 +1218,7 @@ export default function FacturacionPage() {
                             {(item.litros_faltantes || 0) > 0 && <span className="text-red-500"><span className="font-bold">Faltantes:</span> {item.litros_faltantes?.toLocaleString('es-VE')} L</span>}
                             {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
                             {(() => {
-                              const tf = tasaEmision > 0 ? tasaEmision : item.tasa
+                              const tf = Math.round((tasaEmision > 0 ? tasaEmision : item.tasa) * 10000) / 10000
                               const baseLeche = item.litros * item.precio_leche_bs
                               const baseFlete = (item.tipo !== 'ganadero') ? item.litros * item.precio_flete_bs : 0
                               const ndLeche = item.tipo !== 'transportista' ? item.litros * item.precio_leche_usd * tf - baseLeche : 0

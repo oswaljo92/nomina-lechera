@@ -726,11 +726,11 @@ export default function FacturaFormModal({
                 <label className="label">Tasa fecha emisión (Bs/$)</label>
                 <input
                   type="number"
-                  step="0.001"
+                  step="0.0001"
                   value={form.tasa_factura || ''}
                   onChange={e => setForm(f => ({ ...f, tasa_factura: parseFloat(e.target.value) || 0 }))}
                   className="input"
-                  placeholder="0.000"
+                  placeholder="0.0000"
                 />
               </div>
             </div>
