@@ -42,6 +42,7 @@ interface GenPreviewItem {
   nombre: string
   rif: string | null
   litros: number
+  litros_ruta?: number   // total ruta para ganadero_transportista con ruta propia
   litros_faltantes?: number
   litros_agua?: number
   precio_leche_usd: number
@@ -524,6 +525,11 @@ export default function FacturacionPage() {
           : ISLR_DEFAULT
       const islr_pct = ganadero.porcentaje_islr != null ? Number(ganadero.porcentaje_islr) : defaultIslr
 
+      // Para ganadero_transportista con ruta propia: litros_ruta = total ruta (flete cubre todos)
+      const litros_ruta = ganaderosConRutaPropia.has(gid)
+        ? (Object.values(rutaMap).find(rv => rv.ruta.ganadero_id === gid)?.litrosFlete ?? undefined)
+        : undefined
+
       items.push({
         key: gid,
         tipo,
@@ -531,6 +537,7 @@ export default function FacturacionPage() {
         nombre: ganadero.nombre,
         rif: ganadero.rif || ganadero.cedula || null,
         litros,
+        litros_ruta,
         litros_faltantes: litrosFaltantes,
         litros_agua: litrosAgua,
         precio_leche_usd: precioLeche,
@@ -614,9 +621,12 @@ export default function FacturacionPage() {
         }
 
         const tasaFact = tasaEmision > 0 ? tasaEmision : item.tasa
+        const litrosFleteGen = incluyeFlete
+          ? (item.tipo === 'ganadero_transportista' && item.litros_ruta != null ? item.litros_ruta : item.litros)
+          : 0
         const calc = calcularFactura({
           litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
-          litros_flete: incluyeFlete ? item.litros : 0,
+          litros_flete: litrosFleteGen,
           precio_leche_usd: item.precio_leche_usd,
           precio_flete_usd: item.precio_flete_usd,
           precio_leche_bs: item.precio_leche_bs,
@@ -645,7 +655,7 @@ export default function FacturacionPage() {
           precio_leche_usd: item.precio_leche_usd,
           precio_flete_usd: incluyeFlete ? item.precio_flete_usd : null,
           litros_a_pagar: item.tipo === 'transportista' ? 0 : item.litros,
-          litros_flete: incluyeFlete ? item.litros : null,
+          litros_flete: incluyeFlete ? litrosFleteGen : null,
           ...calc,
           islr_pct: item.islr_pct,
           emisor_razon_social: item.emisor.razon_social,
@@ -1220,8 +1230,11 @@ export default function FacturacionPage() {
                             {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
                             {(() => {
                               const tf = Math.round((tasaEmision > 0 ? tasaEmision : item.tasa) * 10000) / 10000
-                              const ndLeche = item.tipo !== 'transportista' ? (item.precio_leche_usd * tf - item.precio_leche_bs) * item.litros : 0
-                              const ndFlete = (item.tipo === 'ganadero_transportista' || item.tipo === 'transportista') ? (item.precio_flete_usd * tf - item.precio_flete_bs) * item.litros : 0
+                              const diffLeche = Math.round((item.precio_leche_usd * tf - item.precio_leche_bs) * 10000) / 10000
+                              const diffFlete = Math.round((item.precio_flete_usd * tf - item.precio_flete_bs) * 10000) / 10000
+                              const litrosFletePreview = item.tipo === 'ganadero_transportista' && item.litros_ruta != null ? item.litros_ruta : item.litros
+                              const ndLeche = item.tipo !== 'transportista' ? diffLeche * item.litros : 0
+                              const ndFlete = (item.tipo === 'ganadero_transportista' || item.tipo === 'transportista') ? diffFlete * litrosFletePreview : 0
                               const ndRaw = ndLeche + ndFlete
                               if (Math.abs(ndRaw) < 0.01) return null
                               const ndVal = ndRedondeada ? Math.round(ndRaw * 100) / 100 : Math.round(ndRaw)

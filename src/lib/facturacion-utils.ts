@@ -113,14 +113,16 @@ export function calcularFactura(params: {
     ? Math.round(pf_bs_raw * 1000) / 1000
     : Math.round(precio_flete_usd * Math.round(tasa_miercoles * 10000) / 10000 * 1000) / 1000
 
-  // ND = (precio_usd × tasa_emisión_4dec − precio_bs_DB) × litros
-  const nota_debito_leche_bs = (precio_leche_usd * tf4 - pl_bs_nd) * litros_a_pagar
+  // Diferencial Bs/L redondeado a 4 decimales → ND = diff4 × litros
+  const diff_leche_nd = Math.round((precio_leche_usd * tf4 - pl_bs_nd) * 10000) / 10000
+  const nota_debito_leche_bs = diff_leche_nd * litros_a_pagar
 
   let flete_bs = 0
   let nota_debito_flete_bs = 0
   if (incluye_flete && litros_flete > 0 && pf_bs > 0) {
     flete_bs = litros_flete * pf_bs
-    nota_debito_flete_bs = (precio_flete_usd * tf4 - pf_bs_nd) * litros_flete
+    const diff_flete_nd = Math.round((precio_flete_usd * tf4 - pf_bs_nd) * 10000) / 10000
+    nota_debito_flete_bs = diff_flete_nd * litros_flete
   }
 
   // Total ND redondeado a 2 decimales para registro contable

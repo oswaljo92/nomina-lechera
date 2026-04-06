@@ -38,8 +38,8 @@ export default function FacturaTemplate({
   const precio_flete_bs = Math.round((factura.precio_flete_usd ?? 0) * factura.tasa_miercoles * 1000) / 1000
   // Tasa emisión a 4 dec y diferenciales Bs/L para display ND
   const tf4 = Math.round(factura.tasa_factura * 10000) / 10000
-  const diff_leche_bs = factura.precio_leche_usd * tf4 - precio_leche_bs
-  const diff_flete_bs = (factura.precio_flete_usd ?? 0) * tf4 - precio_flete_bs
+  const diff_leche_bs = Math.round((factura.precio_leche_usd * tf4 - precio_leche_bs) * 10000) / 10000
+  const diff_flete_bs = Math.round(((factura.precio_flete_usd ?? 0) * tf4 - precio_flete_bs) * 10000) / 10000
 
   // Recalcular con deducciones actuales (para previsualización dinámica)
   const calc = calcularFactura({
