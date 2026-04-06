@@ -36,6 +36,10 @@ export default function FacturaTemplate({
   // Precios Bs/L con 3 decimales (derivados de USD × tasa_miercoles almacenada)
   const precio_leche_bs = Math.round(factura.precio_leche_usd * factura.tasa_miercoles * 1000) / 1000
   const precio_flete_bs = Math.round((factura.precio_flete_usd ?? 0) * factura.tasa_miercoles * 1000) / 1000
+  // Tasa emisión a 4 dec y diferenciales Bs/L para display ND
+  const tf4 = Math.round(factura.tasa_factura * 10000) / 10000
+  const diff_leche_bs = factura.precio_leche_usd * tf4 - precio_leche_bs
+  const diff_flete_bs = (factura.precio_flete_usd ?? 0) * tf4 - precio_flete_bs
 
   // Recalcular con deducciones actuales (para previsualización dinámica)
   const calc = calcularFactura({
@@ -182,7 +186,7 @@ export default function FacturaTemplate({
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_a_pagar, 0)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
+                      {fmtNum(diff_leche_bs, 3)} Bs
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_leche_bs)}</td>
                   </tr>
@@ -210,7 +214,7 @@ export default function FacturaTemplate({
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
+                      {fmtNum(diff_flete_bs, 3)} Bs
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_flete_bs)}</td>
                   </tr>
@@ -238,7 +242,7 @@ export default function FacturaTemplate({
                     </td>
                     <td className="py-2 text-right text-amber-600">{fmtNum(factura.litros_flete, 0)}</td>
                     <td className="py-2 text-right text-amber-600">
-                      Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
+                      {fmtNum(diff_flete_bs, 3)} Bs
                     </td>
                     <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_flete_bs)}</td>
                   </tr>
@@ -284,14 +288,14 @@ export default function FacturaTemplate({
                     <p className="text-[10px] font-black uppercase tracking-widest text-amber-600 mb-2">Nota de Débito Diferencial</p>
                     {calc.nota_debito_leche_bs > 0 && (
                       <FooterRow
-                        label={`Leche — ${fmtNum(factura.litros_a_pagar, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs`}
+                        label={`Leche — ${fmtNum(factura.litros_a_pagar, 0)} L × ${fmtNum(diff_leche_bs, 3)} Bs`}
                         value={fmtND(display.nota_debito_leche_bs)}
                         accent="amber"
                       />
                     )}
                     {incluyeFlete && calc.nota_debito_flete_bs > 0 && (
                       <FooterRow
-                        label={`Flete — ${fmtNum(factura.litros_flete ?? 0, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs`}
+                        label={`Flete — ${fmtNum(factura.litros_flete ?? 0, 0)} L × ${fmtNum(diff_flete_bs, 3)} Bs`}
                         value={fmtND(display.nota_debito_flete_bs)}
                         accent="amber"
                       />
