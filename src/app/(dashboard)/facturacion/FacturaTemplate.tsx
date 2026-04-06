@@ -15,6 +15,8 @@ interface FacturaTemplateProps {
   preview?: boolean
   /** ID único del elemento raíz para captura PDF/imagen */
   captureId?: string
+  /** true → ND con 2 decimales; false → ND como entero sin decimales */
+  ndRedondeada?: boolean
 }
 
 export default function FacturaTemplate({
@@ -22,6 +24,7 @@ export default function FacturaTemplate({
   deducciones,
   preview = false,
   captureId = 'factura-template',
+  ndRedondeada = true,
 }: FacturaTemplateProps) {
   const [moneda, setMoneda] = useState<'bs' | 'usd'>('bs')
 
@@ -53,6 +56,14 @@ export default function FacturaTemplate({
 
   const sym = moneda === 'bs' ? 'Bs' : '$'
   const fmt = (n: number) => moneda === 'bs' ? fmtBs(n) : fmtUSD(n)
+  // Formato específico para ND: 2 dec o entero según toggle
+  const fmtND = (n: number) => {
+    if (ndRedondeada) return fmt(n)
+    const r = Math.round(n)
+    return moneda === 'bs'
+      ? `Bs ${r.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+      : `$ ${r.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  }
 
   const tipoLabel = factura.tipo === 'ganadero'
     ? 'Ganadero'
@@ -173,7 +184,7 @@ export default function FacturaTemplate({
                     <td className="py-2 text-right text-amber-600">
                       Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
-                    <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_leche_bs)}</td>
+                    <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_leche_bs)}</td>
                   </tr>
                 )}
               </>
@@ -201,7 +212,7 @@ export default function FacturaTemplate({
                     <td className="py-2 text-right text-amber-600">
                       Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
-                    <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_flete_bs)}</td>
+                    <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_flete_bs)}</td>
                   </tr>
                 )}
               </>
@@ -229,7 +240,7 @@ export default function FacturaTemplate({
                     <td className="py-2 text-right text-amber-600">
                       Δ {fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs/$
                     </td>
-                    <td className="py-2 text-right font-semibold text-amber-700">{fmt(display.nota_debito_flete_bs)}</td>
+                    <td className="py-2 text-right font-semibold text-amber-700">{fmtND(display.nota_debito_flete_bs)}</td>
                   </tr>
                 )}
               </>
@@ -274,19 +285,19 @@ export default function FacturaTemplate({
                     {calc.nota_debito_leche_bs > 0 && (
                       <FooterRow
                         label={`Leche — ${fmtNum(factura.litros_a_pagar, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs`}
-                        value={fmt(display.nota_debito_leche_bs)}
+                        value={fmtND(display.nota_debito_leche_bs)}
                         accent="amber"
                       />
                     )}
                     {incluyeFlete && calc.nota_debito_flete_bs > 0 && (
                       <FooterRow
                         label={`Flete — ${fmtNum(factura.litros_flete ?? 0, 0)} L × Δ${fmtNum(factura.tasa_factura - factura.tasa_miercoles, 3)} Bs`}
-                        value={fmt(display.nota_debito_flete_bs)}
+                        value={fmtND(display.nota_debito_flete_bs)}
                         accent="amber"
                       />
                     )}
                     <div className="border-t border-amber-300 pt-1.5">
-                      <FooterRow label="Total Nota de Débito" value={fmt(display.nota_debito_total_bs)} accent="amber" bold />
+                      <FooterRow label="Total Nota de Débito" value={fmtND(display.nota_debito_total_bs)} accent="amber" bold />
                     </div>
                   </div>
                 </div>

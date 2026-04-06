@@ -1038,6 +1038,7 @@ export default function FacturacionPage() {
                 factura={viewFactura}
                 deducciones={viewDeducciones}
                 captureId="factura-template"
+                ndRedondeada={ndRedondeada}
               />
             </div>
           </div>
@@ -1125,7 +1126,7 @@ export default function FacturacionPage() {
                     onClick={() => setNdRedondeada(v => !v)}
                     className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border ${ndRedondeada ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-slate-600 border-slate-300 hover:border-blue-400'}`}
                   >
-                    {ndRedondeada ? 'Redondeada (2 dec)' : 'Exacta (sin redondear)'}
+                    {ndRedondeada ? 'ND: 2 decimales' : 'ND: Entero'}
                   </button>
                 </div>
               </div>
@@ -1219,16 +1220,17 @@ export default function FacturacionPage() {
                             {(item.litros_agua || 0) > 0 && <span className="text-orange-500"><span className="font-bold">Agua:</span> {item.litros_agua?.toLocaleString('es-VE')} L</span>}
                             {(() => {
                               const tf = Math.round((tasaEmision > 0 ? tasaEmision : item.tasa) * 10000) / 10000
-                              const baseLeche = item.litros * item.precio_leche_bs
-                              const baseFlete = (item.tipo !== 'ganadero') ? item.litros * item.precio_flete_bs : 0
-                              const ndLeche = item.tipo !== 'transportista' ? item.litros * item.precio_leche_usd * tf - baseLeche : 0
-                              const ndFlete = (item.tipo === 'ganadero_transportista' || item.tipo === 'transportista') ? item.litros * item.precio_flete_usd * tf - baseFlete : 0
+                              const ndLeche = item.tipo !== 'transportista' ? (item.precio_leche_usd * tf - item.precio_leche_bs) * item.litros : 0
+                              const ndFlete = (item.tipo === 'ganadero_transportista' || item.tipo === 'transportista') ? (item.precio_flete_usd * tf - item.precio_flete_bs) * item.litros : 0
                               const ndRaw = ndLeche + ndFlete
-                              if (Math.abs(ndRaw) < 0.001) return null
-                              const ndVal = ndRedondeada ? Math.round(ndRaw * 100) / 100 : ndRaw
+                              if (Math.abs(ndRaw) < 0.01) return null
+                              const ndVal = ndRedondeada ? Math.round(ndRaw * 100) / 100 : Math.round(ndRaw)
+                              const ndFmt = ndRedondeada
+                                ? fmtBs(ndVal)
+                                : `Bs ${ndVal.toLocaleString('es-VE', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
                               return (
                                 <span className="text-amber-600 font-bold">
-                                  ND: {fmtBs(ndVal)}{!ndRedondeada && <span className="text-amber-400 font-normal"> (exacto: {ndRaw.toFixed(6)})</span>}
+                                  ND: {ndFmt}
                                 </span>
                               )
                             })()}
