@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2, ChevronDown, Check, Receipt } from 'lucide-react'
+import { LayoutDashboard, Milk, Users, Map, Settings, LogOut, X, Settings2, ChevronDown, Check, Receipt, BarChart3 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useFabrica } from '@/contexts/FabricaContext'
@@ -55,6 +55,7 @@ export default function Sidebar({
     { name: 'Ganaderos', href: '/ganaderos', icon: Users },
     { name: 'Rutas', href: '/rutas', icon: Map },
     { name: 'Facturación', href: '/facturacion', icon: Receipt },
+    { name: 'Consolidado', href: '/consolidado', icon: BarChart3 },
   ]
 
   if (userRole === 'admin') {
