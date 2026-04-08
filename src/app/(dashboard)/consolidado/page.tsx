@@ -27,7 +27,7 @@ type Camion = {
 
 type Tab = 'romana' | 'ganadero' | 'fsd'
 
-const fmt = (n: number) => n.toLocaleString('es-VE', { maximumFractionDigits: 2 })
+const fmt = (n: number) => Math.round(n).toLocaleString('es-VE')
 const fmtFecha = (iso: string) => {
   const [y, m, d] = iso.substring(0, 10).split('-')
   return `${d}/${m}/${y}`
@@ -96,23 +96,28 @@ export default function ConsolidadoPage() {
   const rowsRomana = useMemo(() => {
     const t = t1Texto.toLowerCase()
     return data
-      .filter(c => !t || c.ticket_romana.toLowerCase().includes(t) || (c.placa || '').toLowerCase().includes(t) || (c.rutas?.nombre_ruta || '').toLowerCase().includes(t))
-      .map(c => ({
-        id: c.id,
-        fecha: c.fecha_ingreso.substring(0, 10),
-        ticket: c.ticket_romana,
-        placa: c.placa,
-        ruta: c.rutas?.nombre_ruta || '—',
-        litros_romana: c.litros_romana || 0,
-        total_gans: c.recepciones_detalle.reduce((s, d) => s + (d.litros_recepcion || 0), 0),
-        num_gans: c.recepciones_detalle.length,
-        agua_transp: c.agua_transporte || 0,
-      }))
+      .filter(c => !t || c.ticket_romana.toLowerCase().includes(t) || (c.rutas?.nombre_ruta || '').toLowerCase().includes(t))
+      .map(c => {
+        const litros_pagados = c.recepciones_detalle.reduce((s, d) => s + (d.litros_a_pagar || 0), 0)
+        const litros_romana = c.litros_romana || 0
+        return {
+          id: c.id,
+          fecha: c.fecha_ingreso.substring(0, 10),
+          ticket: c.ticket_romana,
+          ruta: c.rutas?.nombre_ruta || '—',
+          litros_romana,
+          litros_pagados,
+          dif: litros_romana - litros_pagados,
+          num_gans: c.recepciones_detalle.length,
+          agua_transp: c.agua_transporte || 0,
+        }
+      })
   }, [data, t1Texto])
 
   const totRomana = useMemo(() => ({
     litros_romana: rowsRomana.reduce((s, r) => s + r.litros_romana, 0),
-    total_gans: rowsRomana.reduce((s, r) => s + r.total_gans, 0),
+    litros_pagados: rowsRomana.reduce((s, r) => s + r.litros_pagados, 0),
+    dif: rowsRomana.reduce((s, r) => s + r.dif, 0),
     agua_transp: rowsRomana.reduce((s, r) => s + r.agua_transp, 0),
   }), [rowsRomana])
 
@@ -122,13 +127,14 @@ export default function ConsolidadoPage() {
     const rows: any[] = []
     for (const c of data) {
       const fecha = c.fecha_ingreso.substring(0, 10)
+      const ruta = c.rutas?.nombre_ruta || '—'
       if (t2Vista === 'diaria' && fecha !== t2Fecha) continue
       for (const d of c.recepciones_detalle) {
         const cod = d.ganaderos?.codigo_ganadero || ''
         const nom = d.ganaderos?.nombre || ''
         const grp = d.ganaderos?.grupo || ''
-        if (t && !cod.toLowerCase().includes(t) && !nom.toLowerCase().includes(t) && !grp.toLowerCase().includes(t)) continue
-        rows.push({ id: d.id, fecha, ticket: c.ticket_romana, placa: c.placa, codigo: cod, nombre: nom, grupo: grp || '—', tipo: d.ganaderos?.tipo_proveedor || '', litros_rec: d.litros_recepcion || 0, litros_desc: d.litros_descuento || 0, litros_pagar: d.litros_a_pagar || 0 })
+        if (t && !cod.toLowerCase().includes(t) && !nom.toLowerCase().includes(t) && !grp.toLowerCase().includes(t) && !ruta.toLowerCase().includes(t)) continue
+        rows.push({ id: d.id, fecha, ticket: c.ticket_romana, ruta, codigo: cod, nombre: nom, grupo: grp || '—', tipo: d.ganaderos?.tipo_proveedor || '', litros_rec: d.litros_recepcion || 0, litros_desc: d.litros_descuento || 0, litros_pagar: d.litros_a_pagar || 0 })
       }
     }
     return rows
@@ -231,7 +237,7 @@ export default function ConsolidadoPage() {
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input value={t1Texto} onChange={e => setT1Texto(e.target.value)} placeholder="Buscar ticket, placa o ruta…" className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-white font-bold text-slate-700 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                   </div>
-                  <button onClick={() => exportExcel(rowsRomana.map(r => ({ Fecha: fmtFecha(r.fecha), 'Ticket Romana': r.ticket, Placa: r.placa !== '0' ? r.placa : '', Ruta: r.ruta, 'Litros Romana': r.litros_romana, 'Total Ganaderos (L)': r.total_gans, 'N° Ganaderos': r.num_gans, 'Agua Transporte (L)': r.agua_transp })), 'consolidado_romana')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 border border-emerald-200 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
+                  <button onClick={() => exportExcel(rowsRomana.map(r => ({ Fecha: fmtFecha(r.fecha), 'Ticket Romana': r.ticket, Ruta: r.ruta, 'Litros Romana': Math.round(r.litros_romana), 'Litros Pagados': Math.round(r.litros_pagados), 'DIF.': Math.round(r.dif), 'N° Ganaderos': r.num_gans, 'Agua Transporte (L)': Math.round(r.agua_transp) })), 'consolidado_romana')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 border border-emerald-200 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
                     <Download size={14} /> Exportar
                   </button>
                 </div>
@@ -247,9 +253,10 @@ export default function ConsolidadoPage() {
                           <span className="text-xs font-black text-slate-800">{fmt(r.litros_romana)} L</span>
                         </div>
                         <div className="text-sm font-black text-slate-900">{r.ticket}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{r.placa !== '0' ? r.placa : '—'} · {r.ruta}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{r.ruta} · {r.num_gans} gans.</div>
                         <div className="flex flex-wrap gap-3 mt-2 text-xs text-slate-600">
-                          <span><b>Gans:</b> {fmt(r.total_gans)} L <span className="text-slate-400">({r.num_gans})</span></span>
+                          <span><b>Pagados:</b> {fmt(r.litros_pagados)} L</span>
+                          <span className={r.dif >= 0 ? 'text-emerald-700' : 'text-red-700'}><b>DIF:</b> {r.dif >= 0 ? '+' : ''}{fmt(r.dif)} L</span>
                           {r.agua_transp > 0 && <span className="text-violet-700"><b>Agua Transp:</b> {fmt(r.agua_transp)} L</span>}
                         </div>
                       </div>
@@ -259,7 +266,8 @@ export default function ConsolidadoPage() {
                       <div className="text-xs font-black text-indigo-800 mb-1">TOTALES — {rowsRomana.length} tickets</div>
                       <div className="flex flex-wrap gap-3 text-xs">
                         <span><b>Romana:</b> {fmt(totRomana.litros_romana)} L</span>
-                        <span><b>Ganaderos:</b> {fmt(totRomana.total_gans)} L</span>
+                        <span><b>Pagados:</b> {fmt(totRomana.litros_pagados)} L</span>
+                        <span className={totRomana.dif >= 0 ? 'text-emerald-700' : 'text-red-700'}><b>DIF:</b> {totRomana.dif >= 0 ? '+' : ''}{fmt(totRomana.dif)} L</span>
                         <span><b>Agua Transp:</b> {fmt(totRomana.agua_transp)} L</span>
                       </div>
                     </div>
@@ -272,7 +280,7 @@ export default function ConsolidadoPage() {
                     <table className="w-full text-xs">
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
-                          {['Fecha', 'Ticket Romana', 'Placa', 'Ruta', 'Lit. Romana', 'Total Gans.', '# Gans', 'Agua Transp.'].map(h => (
+                          {['Fecha', 'Ticket Romana', 'Ruta', 'Lit. Romana', 'Lit. Pagados', 'DIF.', '# Gans', 'Agua Transp.'].map(h => (
                             <th key={h} className="px-3 py-2.5 text-left font-black text-slate-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
@@ -284,10 +292,10 @@ export default function ConsolidadoPage() {
                             <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                               <td className="px-3 py-2 font-bold text-indigo-700 whitespace-nowrap">{fmtFecha(r.fecha)}</td>
                               <td className="px-3 py-2 font-black text-slate-900">{r.ticket}</td>
-                              <td className="px-3 py-2 text-slate-500">{r.placa !== '0' ? r.placa : '—'}</td>
                               <td className="px-3 py-2 text-slate-700">{r.ruta}</td>
                               <td className="px-3 py-2 font-black text-slate-900 text-right">{fmt(r.litros_romana)}</td>
-                              <td className="px-3 py-2 font-bold text-slate-700 text-right">{fmt(r.total_gans)}</td>
+                              <td className="px-3 py-2 font-bold text-slate-700 text-right">{fmt(r.litros_pagados)}</td>
+                              <td className={`px-3 py-2 font-black text-right ${r.dif >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{r.dif >= 0 ? '+' : ''}{fmt(r.dif)}</td>
                               <td className="px-3 py-2 text-slate-500 text-center">{r.num_gans}</td>
                               <td className="px-3 py-2 font-bold text-violet-700 text-right">{r.agua_transp > 0 ? fmt(r.agua_transp) : '—'}</td>
                             </tr>
@@ -295,9 +303,10 @@ export default function ConsolidadoPage() {
                       </tbody>
                       <tfoot className="bg-indigo-50 border-t-2 border-indigo-200">
                         <tr>
-                          <td colSpan={4} className="px-3 py-2.5 font-black text-indigo-800 uppercase text-xs">Totales — {rowsRomana.length} tickets</td>
+                          <td colSpan={3} className="px-3 py-2.5 font-black text-indigo-800 uppercase text-xs">Totales — {rowsRomana.length} tickets</td>
                           <td className="px-3 py-2.5 font-black text-indigo-900 text-right">{fmt(totRomana.litros_romana)}</td>
-                          <td className="px-3 py-2.5 font-black text-indigo-900 text-right">{fmt(totRomana.total_gans)}</td>
+                          <td className="px-3 py-2.5 font-black text-indigo-900 text-right">{fmt(totRomana.litros_pagados)}</td>
+                          <td className={`px-3 py-2.5 font-black text-right ${totRomana.dif >= 0 ? 'text-emerald-700' : 'text-red-700'}`}>{totRomana.dif >= 0 ? '+' : ''}{fmt(totRomana.dif)}</td>
                           <td></td>
                           <td className="px-3 py-2.5 font-black text-violet-800 text-right">{fmt(totRomana.agua_transp)}</td>
                         </tr>
@@ -328,9 +337,9 @@ export default function ConsolidadoPage() {
                   )}
                   <div className="flex-1 min-w-[180px] relative">
                     <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input value={t2Texto} onChange={e => setT2Texto(e.target.value)} placeholder="Buscar código, nombre o grupo…" className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-white font-bold text-slate-700 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                    <input value={t2Texto} onChange={e => setT2Texto(e.target.value)} placeholder="Buscar código, nombre, grupo o ruta…" className="w-full pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-xl bg-white font-bold text-slate-700 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                   </div>
-                  <button onClick={() => exportExcel(rowsGanadero.map(r => ({ Fecha: fmtFecha(r.fecha), 'Cód. Ganadero': r.codigo, Nombre: r.nombre, Grupo: r.grupo !== '—' ? r.grupo : '', Tipo: r.tipo, Ticket: r.ticket, Placa: r.placa !== '0' ? r.placa : '', 'Litros Rec. (L)': r.litros_rec, 'Agua Dcto (L)': r.litros_desc, 'Litros a Pagar (L)': r.litros_pagar })), 'consolidado_ganadero')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 border border-emerald-200 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
+                  <button onClick={() => exportExcel(rowsGanadero.map(r => ({ Fecha: fmtFecha(r.fecha), 'Cód. Ganadero': r.codigo, Ruta: r.ruta, Nombre: r.nombre, Grupo: r.grupo !== '—' ? r.grupo : '', Tipo: r.tipo, Ticket: r.ticket, 'Litros Rec. (L)': Math.round(r.litros_rec), 'Agua Dcto (L)': Math.round(r.litros_desc), 'Litros a Pagar (L)': Math.round(r.litros_pagar) })), 'consolidado_ganadero')} className="flex items-center gap-1.5 px-3 py-2 text-xs font-bold text-emerald-700 border border-emerald-200 rounded-xl bg-emerald-50 hover:bg-emerald-100 transition-colors">
                     <Download size={14} /> Exportar
                   </button>
                 </div>
@@ -349,8 +358,11 @@ export default function ConsolidadoPage() {
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${r.tipo === 'PROPIO' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.tipo}</span>
                         </div>
                         <div className="text-sm font-black text-slate-900">{r.nombre}</div>
-                        {r.grupo !== '—' && <span className="inline-block bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase mt-0.5">{r.grupo}</span>}
-                        <div className="text-[10px] text-slate-400 mt-0.5">{r.ticket}{r.placa !== '0' ? ` · ${r.placa}` : ''}</div>
+                        <div className="flex flex-wrap gap-1 mt-0.5">
+                          {r.grupo !== '—' && <span className="inline-block bg-violet-100 text-violet-800 text-[10px] font-black px-2 py-0.5 rounded uppercase">{r.grupo}</span>}
+                          <span className="inline-block bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded">{r.ruta}</span>
+                        </div>
+                        <div className="text-[10px] text-slate-400 mt-0.5">{r.ticket}</div>
                         <div className="flex gap-3 mt-2 text-xs text-slate-600">
                           <span><b>Rec:</b> {fmt(r.litros_rec)} L</span>
                           {r.litros_desc > 0 && <span className="text-red-600"><b>Agua:</b> {fmt(r.litros_desc)} L</span>}
@@ -377,18 +389,19 @@ export default function ConsolidadoPage() {
                       <thead className="bg-slate-50 border-b border-slate-200">
                         <tr>
                           {t2Vista === 'total' && <th className="px-3 py-2.5 text-left font-black text-slate-600 uppercase tracking-wide whitespace-nowrap">Fecha</th>}
-                          {['Cód.', 'Nombre', 'Grupo', 'Tipo', 'Ticket', 'Lit. Rec.', 'Agua (Dcto)', 'Lit. a Pagar'].map(h => (
+                          {['Cód.', 'Ruta', 'Nombre', 'Grupo', 'Tipo', 'Ticket', 'Lit. Rec.', 'Agua (Dcto)', 'Lit. a Pagar'].map(h => (
                             <th key={h} className="px-3 py-2.5 text-left font-black text-slate-600 uppercase tracking-wide whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {rowsGanadero.length === 0
-                          ? <tr><td colSpan={9} className="text-center py-10 text-slate-400 font-bold">Sin registros para este período o filtro</td></tr>
+                          ? <tr><td colSpan={10} className="text-center py-10 text-slate-400 font-bold">Sin registros para este período o filtro</td></tr>
                           : rowsGanadero.map(r => (
                             <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                               {t2Vista === 'total' && <td className="px-3 py-2 font-bold text-indigo-700 whitespace-nowrap">{fmtFecha(r.fecha)}</td>}
                               <td className="px-3 py-2 font-black text-slate-900 whitespace-nowrap">{r.codigo}</td>
+                              <td className="px-3 py-2 text-slate-600 whitespace-nowrap">{r.ruta}</td>
                               <td className="px-3 py-2 text-slate-700">{r.nombre}</td>
                               <td className="px-3 py-2">
                                 {r.grupo !== '—'
@@ -407,7 +420,7 @@ export default function ConsolidadoPage() {
                       </tbody>
                       <tfoot className="bg-indigo-50 border-t-2 border-indigo-200">
                         <tr>
-                          <td colSpan={t2Vista === 'total' ? 6 : 5} className="px-3 py-2.5 font-black text-indigo-800 uppercase text-xs">Totales — {rowsGanadero.length} registros</td>
+                          <td colSpan={t2Vista === 'total' ? 7 : 6} className="px-3 py-2.5 font-black text-indigo-800 uppercase text-xs">Totales — {rowsGanadero.length} registros</td>
                           <td className="px-3 py-2.5 font-black text-indigo-900 text-right">{fmt(totGanadero.litros_rec)}</td>
                           <td className="px-3 py-2.5 font-black text-red-700 text-right">{fmt(totGanadero.litros_desc)}</td>
                           <td className="px-3 py-2.5 font-black text-emerald-800 text-right">{fmt(totGanadero.litros_pagar)}</td>
