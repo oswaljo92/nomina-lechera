@@ -473,7 +473,7 @@ export default function RecepcionPage() {
   }
 
   const handleConfirmarImport = async () => {
-    if (!selectedFabricaId || selectedFabricaId === 'all') return
+    if (!fabricaIdParaGuardar) return
     setImportLoading(true)
     const errores: string[] = []
     const exitosos: any[] = []
@@ -495,7 +495,7 @@ export default function RecepcionPage() {
     }
 
     // Cargar ganaderos y crioscopia ANTES de agrupar para conocer la ruta de cada ganadero
-    const { data: ganaderosBD } = await supabase.from('ganaderos').select('id, codigo_ganadero, ruta_id').eq('fabrica_id', selectedFabricaId)
+    const { data: ganaderosBD } = await supabase.from('ganaderos').select('id, codigo_ganadero, ruta_id').eq('fabrica_id', fabricaIdParaGuardar)
     const ganaderosMap = new Map((ganaderosBD || []).map((g: any) => [String(g.codigo_ganadero).trim(), g]))
 
     const { data: criosBD } = await supabase.from('tabla_crioscopia').select('punto_crioscopico, porcentaje_agua').order('punto_crioscopico', { ascending: false })
@@ -507,84 +507,113 @@ export default function RecepcionPage() {
       , criosTable[0])
     }
 
-    // Agrupar por ticket+placa+fecha+ruta para crear un registro de camión por cada ruta
+    // Agrupar por ticket+fecha+ruta (placa es opcional, no forma parte del key)
     const grupos = new Map<string, { fecha: string; ticket: string; placa: string; ruta_id: string | null; detalles: any[] }>()
     for (let i = 0; i < importRows.length; i++) {
       const row = importRows[i]
       const fila = i + 2
       const fecha = parseDate(String(row['Fecha ingreso'] || ''))
       const ticket = String(row['Ticket Romana'] || '').trim()
-      const placa = String(row['Placa'] || '').trim()
+      const placa = String(row['Placa'] || '').trim() || '0'
       const codigoGan = String(row['Codigo Ganadero'] || '').trim()
       if (!fecha) { const m = 'Falta Fecha ingreso'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       if (!ticket) { const m = 'Falta Ticket Romana'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
-      if (!placa) { const m = 'Falta Placa'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       if (!codigoGan) { const m = 'Falta Codigo Ganadero'; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       const ganObj = ganaderosMap.get(codigoGan)
       if (!ganObj) { const m = `Ganadero "${codigoGan}" no encontrado`; errores.push(`Fila ${fila}: ${m}`); fallidos.push({ fila, datos: row, motivo: m }); continue }
       const ruta_id = ganObj.ruta_id || null
-      const key = `${ticket}|${placa}|${fecha}|${ruta_id}`
+      const key = `${ticket}|${fecha}|${ruta_id}`
       if (!grupos.has(key)) grupos.set(key, { fecha, ticket, placa, ruta_id, detalles: [] })
       grupos.get(key)!.detalles.push({ ...row, _fila: fila })
     }
 
+    const insertarDetalle = async (camionId: string, d: any, grupo: { fecha: string; ticket: string; placa: string }) => {
+      const cod = String(d['Codigo Ganadero'] || '').trim()
+      const ganObj = ganaderosMap.get(cod)
+      if (!ganObj) { errores.push(`Fila ${d._fila}: Ganadero "${cod}" no encontrado.`); fallidos.push({ fila: d._fila, datos: d, motivo: `Ganadero "${cod}" no encontrado.` }); return false }
+      const litrosDet = Number(d['Litros Recepcion']) || 0
+      const crioVal = Number(d['Crioscopia']) || 0
+      const crioMatch = nearestCrio(crioVal)
+      const pctAgua = crioMatch.porcentaje_agua || 0
+      const litrosDesc = (litrosDet * pctAgua) / 100
+      const litrosPagar = litrosDet - litrosDesc
+      const { error: detErr } = await supabase.from('recepciones_detalle').insert({
+        recepcion_id: camionId,
+        ganadero_id: ganObj.id,
+        litros_recepcion: litrosDet,
+        grasa: Number(d['Grasa']) || 0,
+        proteina: Number(d['Proteina']) || 0,
+        acidez: Number(d['Acidez']) || 0,
+        temperatura: Number(d['Temperatura']) || 0,
+        crioscopia: crioMatch.punto_crioscopico,
+        h_reductasa: Number(d['Reductasa']) || 0,
+        ufc: Number(d['UFC']) || 0,
+        porcentaje_agua_desc: pctAgua,
+        litros_descuento: litrosDesc,
+        litros_a_pagar: litrosPagar,
+      })
+      if (detErr) {
+        errores.push(`Fila ${d._fila}: ${detErr.message}`)
+        fallidos.push({ fila: d._fila, datos: d, motivo: detErr.message })
+        return false
+      }
+      ok++
+      exitosos.push({ Fila: d._fila, Fecha: grupo.fecha, 'Cód. Ganadero': cod, 'Litros': litrosDet, 'Ticket': grupo.ticket, Placa: grupo.placa, 'Crioscopía': crioMatch.punto_crioscopico, 'Agua %': pctAgua, 'Dcto L': Math.round(litrosDesc), 'A Pagar L': Math.round(litrosPagar) })
+      return true
+    }
+
+    const recalcularLitrosRomana = async (camionId: string) => {
+      const { data: allDets } = await supabase.from('recepciones_detalle').select('litros_a_pagar').eq('recepcion_id', camionId)
+      const total = (allDets || []).reduce((s: number, d: any) => s + (Number(d.litros_a_pagar) || 0), 0)
+      await supabase.from('recepciones_camion').update({ litros_romana: total }).eq('id', camionId)
+    }
+
     for (const [, grupo] of grupos) {
       const fechaISO = `${grupo.fecha}T12:00:00`
-      // Verificar duplicado incluyendo ruta para permitir el mismo ticket en rutas distintas
-      const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', selectedFabricaId).eq('fecha_ingreso', fechaISO).eq('ruta_id', grupo.ruta_id ?? '').maybeSingle()
+      const { data: existing } = await supabase.from('recepciones_camion').select('id').eq('ticket_romana', grupo.ticket).eq('fabrica_id', fabricaIdParaGuardar).eq('fecha_ingreso', fechaISO).eq('ruta_id', grupo.ruta_id ?? '').maybeSingle()
+
       if (existing) {
-        const m = `Ticket "${grupo.ticket}" del ${grupo.fecha} ya existe en esta ruta`
-        errores.push(m)
-        for (const d of grupo.detalles) fallidos.push({ fila: d._fila, datos: d, motivo: m })
+        // Ticket ya existe — intentar completar ganaderos faltantes
+        const camionId = existing.id
+        const { data: existingDets } = await supabase.from('recepciones_detalle').select('ganadero_id').eq('recepcion_id', camionId)
+        const existingGanIds = new Set((existingDets || []).map((d: any) => d.ganadero_id))
+        let addedInGroup = 0
+        for (const d of grupo.detalles) {
+          const cod = String(d['Codigo Ganadero'] || '').trim()
+          const ganObj = ganaderosMap.get(cod)
+          if (!ganObj) { errores.push(`Fila ${d._fila}: Ganadero "${cod}" no encontrado.`); fallidos.push({ fila: d._fila, datos: d, motivo: `Ganadero "${cod}" no encontrado.` }); continue }
+          if (existingGanIds.has(ganObj.id)) {
+            errores.push(`Fila ${d._fila}: Ganadero "${cod}" ya importado en ticket "${grupo.ticket}", omitido.`)
+            fallidos.push({ fila: d._fila, datos: d, motivo: `Ganadero "${cod}" ya importado en ticket "${grupo.ticket}"` })
+            continue
+          }
+          const inserted = await insertarDetalle(camionId, d, grupo)
+          if (inserted) addedInGroup++
+        }
+        if (addedInGroup > 0) await recalcularLitrosRomana(camionId)
         continue
       }
 
+      // Ticket nuevo — crear camión e insertar todos los detalles
       const litrosRomana = grupo.detalles.reduce((s: number, d: any) => s + (Number(d['Litros Recepcion']) || 0), 0)
-
       const { data: camionIns, error: camionErr } = await supabase.from('recepciones_camion').insert({
         ticket_romana: grupo.ticket,
         placa: grupo.placa,
         fecha_ingreso: fechaISO,
         litros_romana: litrosRomana,
         ruta_id: grupo.ruta_id,
-        fabrica_id: selectedFabricaId,
+        fabrica_id: fabricaIdParaGuardar,
       }).select('id').single()
 
       if (camionErr || !camionIns) { errores.push(`Ticket "${grupo.ticket}": Error al crear — ${camionErr?.message}`); continue }
 
+      let addedInGroup = 0
       for (const d of grupo.detalles) {
-        const cod = String(d['Codigo Ganadero'] || '').trim()
-        const ganObj = ganaderosMap.get(cod)
-        if (!ganObj) { errores.push(`Fila ${d._fila}: Ganadero "${cod}" no encontrado.`); continue }
-        const litrosDet = Number(d['Litros Recepcion']) || 0
-        const crioVal = Number(d['Crioscopia']) || 0
-        const crioMatch = nearestCrio(crioVal)
-        const pctAgua = crioMatch.porcentaje_agua || 0
-        const litrosDesc = (litrosDet * pctAgua) / 100
-        const litrosPagar = litrosDet - litrosDesc
-        const { error: detErr } = await supabase.from('recepciones_detalle').insert({
-          recepcion_id: camionIns.id,
-          ganadero_id: ganObj.id,
-          litros_recepcion: litrosDet,
-          grasa: Number(d['Grasa']) || 0,
-          proteina: Number(d['Proteina']) || 0,
-          acidez: Number(d['Acidez']) || 0,
-          temperatura: Number(d['Temperatura']) || 0,
-          crioscopia: crioMatch.punto_crioscopico,
-          h_reductasa: Number(d['Reductasa']) || 0,
-          ufc: Number(d['UFC']) || 0,
-          porcentaje_agua_desc: pctAgua,
-          litros_descuento: litrosDesc,
-          litros_a_pagar: litrosPagar,
-        })
-        if (detErr) {
-          errores.push(`Fila ${d._fila}: ${detErr.message}`)
-          fallidos.push({ fila: d._fila, datos: d, motivo: detErr.message })
-        } else {
-          ok++
-          exitosos.push({ Fila: d._fila, Fecha: grupo.fecha, 'Cód. Ganadero': cod, 'Litros': litrosDet, 'Ticket': grupo.ticket, Placa: grupo.placa, 'Crioscopía': crioMatch.punto_crioscopico, 'Agua %': pctAgua, 'Dcto L': Math.round(litrosDesc), 'A Pagar L': Math.round(litrosPagar) })
-        }
+        const inserted = await insertarDetalle(camionIns.id, d, grupo)
+        if (inserted) addedInGroup++
       }
+      // Recalcular litros_romana con base en los detalles realmente insertados
+      if (addedInGroup > 0) await recalcularLitrosRomana(camionIns.id)
     }
 
     logAction(supabase, curUser, 'Recepción', 'IMPORTAR_MASIVO', `Importados ${ok} registros. Errores: ${errores.length}`)
@@ -833,7 +862,7 @@ export default function RecepcionPage() {
                     </button>
                     {isAdmin ? (
                       <>
-                        <button onClick={() => importRef.current?.click()} disabled={!selectedFabricaId || selectedFabricaId === 'all'} className="flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl bg-blue-50 shadow-sm text-xs disabled:opacity-40">
+                        <button onClick={() => importRef.current?.click()} disabled={!fabricaIdParaGuardar} className="flex items-center justify-center gap-1.5 px-3 py-2.5 font-bold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl bg-blue-50 shadow-sm text-xs disabled:opacity-40">
                           <Upload size={15} /> Importar
                         </button>
                         <input ref={importRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleArchivoImport} />
